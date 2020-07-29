@@ -4,6 +4,8 @@ import multiprocessing
 from NDChild import NDChild
 from random import choice, random
 from Sentence import Sentence
+import time
+
 current_time = time.strftime("%m.%d.%y_%H:%M", time.localtime())
 Out_Data_File = 'OUTDATANoise%s.csv' % current_time
 
