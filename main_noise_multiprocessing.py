@@ -1,10 +1,12 @@
 # coding: utf-8
 
 import multiprocessing
-from NDChild import NDChild
+import json
 from random import choice, random
-from Sentence import Sentence
 import time
+
+from NDChild import NDChild
+from Sentence import Sentence
 
 current_time = time.strftime("%m.%d.%y_%H:%M", time.localtime())
 Out_Data_File = 'OUTDATANoise%s.csv' % current_time
@@ -77,7 +79,7 @@ class TrialRunner:
 
 def run_trial(args):
     experiment = TrialRunner(args['language'], args['noise_percentage'])
-    return {'child': experiment.run_child(),
+    return {'child': experiment.run_child().grammar,
             'args': args}
 
 
@@ -94,7 +96,7 @@ def run_experiment():
     ]
 
     OUTDATA = open(Out_Data_File,"w") #open outdata writable file
-    
+
     with multiprocessing.Pool() as p:
         # each task is procesed on the next available CPU and the results are
         # processed as they come in by this loop.
@@ -102,8 +104,8 @@ def run_experiment():
             # result here is a dict with two keys: 'child' and NDChild, and 'args',
             # the task dictionary from the tasks list that contains 'language' and
             # 'noise' keys.
-            print(result)  # write this to a csv
-            csvOutput(OUTDATA, run_trial, tasks[lang], tasks[noise], result[child]) ##maybe?? see def on ln 13.
+            with open('output.jsonl', 'w') as fh:
+                fh.write(json.dumps(result) + '\n')
 
 
 if __name__ == "__main__":
