@@ -8,6 +8,18 @@ import time
 from NDChild import NDChild
 from Sentence import Sentence
 
+import datetime
+
+
+def timed(fn):
+    def wrapped(*args, **kwargs):
+        then = datetime.datetime.now()
+        val = fn(*args, **kwargs)
+        delta = datetime.datetime.now() - then
+        print(fn.__name__, delta)
+        return val
+    return wrapped
+
 current_time = time.strftime("%m.%d.%y_%H:%M", time.localtime())
 Out_Data_File = 'OUTDATANoise%s.csv' % current_time
 
@@ -48,6 +60,7 @@ class TrialRunner:
         self.noise_percentage = noise_percentage
         self.language_domain, self.noise_domain = self.create_language_domain()
 
+    @timed
     def create_language_domain(self):
         language_domain = []
         noise_domain = []
@@ -92,7 +105,7 @@ def run_experiment():
         {'language': lang, 'noise_percentage': noise}
         for lang in languages
         for noise in noise_levels
-        for _ in range(100)
+        for _ in range(5)
     ]
 
     OUTDATA = open(Out_Data_File,"w") #open outdata writable file
@@ -100,11 +113,11 @@ def run_experiment():
     with multiprocessing.Pool() as p:
         # each task is procesed on the next available CPU and the results are
         # processed as they come in by this loop.
-        for result in report_progress(p.imap_unordered(run_trial, tasks), total=len(tasks)):
-            # result here is a dict with two keys: 'child' and NDChild, and 'args',
-            # the task dictionary from the tasks list that contains 'language' and
-            # 'noise' keys.
-            with open('output.jsonl', 'w') as fh:
+        with open('output.jsonl', 'w') as fh:
+            for result in report_progress(p.imap_unordered(run_trial, tasks), total=len(tasks)):
+                # result here is a dict with two keys: 'child' and NDChild, and 'args',
+                # the task dictionary from the tasks list that contains 'language' and
+                # 'noise' keys.
                 fh.write(json.dumps(result) + '\n')
 
 
