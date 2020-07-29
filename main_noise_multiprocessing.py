@@ -4,6 +4,13 @@ import multiprocessing
 from NDChild import NDChild
 from random import choice, random
 from Sentence import Sentence
+current_time = time.strftime("%m.%d.%y_%H:%M", time.localtime())
+Out_Data_File = 'OUTDATANoise%s.csv' % current_time
+
+
+def csvOutput(File, run, lang, noise, child): #each line in csv should contain "lang/noiseamt/child#/final weights##
+    outStr = str(run),",",str(lang),",",str(noise),",",child.grammar("SP"),",",child.grammar("HIP"),",",child.grammar("HCP"),",",child.grammar("OPT"),",",child.grammar("NS"),",",child.grammar("NT"),",",child.grammar("WHM"),",",child.grammar("PI"),",",child.grammar("TM"),",",child.grammar("VtoI"),",",child.grammar("ItoC"),",",child.grammar("AH"),",",child.grammar("QInv"),",","\n"
+    File.write(outStr)
 
 
 def report_progress(iterable, **kwargs):
@@ -84,6 +91,8 @@ def run_experiment():
         for _ in range(100)
     ]
 
+    OUTDATA = open(Out_Data_File,"w") #open outdata writable file
+    
     with multiprocessing.Pool() as p:
         # each task is procesed on the next available CPU and the results are
         # processed as they come in by this loop.
@@ -92,6 +101,8 @@ def run_experiment():
             # the task dictionary from the tasks list that contains 'language' and
             # 'noise' keys.
             print(result)  # write this to a csv
+            csvOutput(OUTDATA, run_trial, tasks[lang], tasks[noise], result[child]) ##maybe?? see def on ln 13.
+
 
 if __name__ == "__main__":
     run_experiment()
