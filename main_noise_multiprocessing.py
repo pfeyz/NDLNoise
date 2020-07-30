@@ -1,6 +1,8 @@
 # coding: utf-8
 
+import argparse
 import csv
+import dataclasses
 import logging
 import multiprocessing
 from datetime import datetime
@@ -13,6 +15,34 @@ from Sentence import Sentence
 
 logging.basicConfig(level=logging.INFO)
 
+
+class ExperimentDefaults:
+    """Defaults paramters for experiment."""
+    rate = 0.9
+    conservativerate = 0.0005
+    numberofsentences = 500000
+    threshold = 0.001
+    noise_levels = [0, 0.05, 0.10, 0.25, 0.50]
+
+
+@dataclasses.dataclass
+class SimulationParameters:
+    """ The parameters for a single echild simulation """
+    language: int
+    noise: float
+    rate: float
+    conservativerate: float
+    numberofsentences: int
+    threshold: float
+
+
+class Language:
+    English = 611
+    French = 584
+    German = 2253
+    Japanese = 3856
+
+
 DOMAINS = {}  # will contain mappings between language ids and (language, noise)
               # domain pairs
 
@@ -23,13 +53,6 @@ class LanguageNotFound(Exception):
 
     """
     pass
-
-
-class Language:
-    English = 611
-    French = 584
-    German = 2253
-    Japanese = 3856
 
 
 def create_language_domain(colag_domain, language: int):
@@ -81,57 +104,38 @@ def progress_bar(iterable, **kwargs):
     return tqdm.tqdm(iterable, **kwargs)
 
 
-# TODO: this class probably doesn't need to exist
-class TrialRunner:
-    rate = 0.9
-    conservativerate = 0.0005
-    numberofsentences = 500000
-    threshold = 0.001
+def run_child(language, noise, rate, conservativerate, numberofsentences,
+              threshold):
 
-    def __init__(self, language: int, noise: float):
-        self.language = language
-        self.noise_percentage = noise
-        self.language_domain, self.noise_domain = DOMAINS[self.language]
+    aChild = NDChild(rate, conservativerate, language)
+    language_domain, noise_domain = DOMAINS[language]
 
-    def get_parameters(self):
-        return {
-            'rate': self.rate,
-            'conservativerate': self.conservativerate,
-            'numberofsentences': self.numberofsentences,
-            'threshold': self.threshold
-        }
+    for i in range(numberofsentences):
+        if random() < noise:
+            s = choice(noise_domain)
+        else:
+            s = choice(language_domain)
+        aChild.consumeSentence(s)
 
-    def run_child(self):
-        aChild = NDChild(self.rate, self.conservativerate, self.language)
-
-        for i in range(self.numberofsentences):
-            if random() < self.noise_percentage:
-                s = choice(self.noise_domain)
-            else:
-                s = choice(self.language_domain)
-            aChild.consumeSentence(s)
-
-        return aChild
+    return aChild
 
 
-def run_trial(args):
-    """ Runs a single echild simulation """
-    logging.debug('running echild with %s', args)
+def run_trial(params: SimulationParameters):
+    """ Runs a single echild simulation and reports the results """
+    logging.debug('running echild with %s', params)
 
-    experiment = TrialRunner(args['lang'], args['noise'])
+    params = dataclasses.asdict(params)
     then = datetime.now()
-    child = experiment.run_child()
+    child = run_child(**params)
     now = datetime.now()
 
-    logging.debug('echild learned %s', child.grammar)
-
-    # TODO: define a more explicit SimulationResult class or something with
-    # known fields.
+    child.grammar['language'] = child.grammar.pop('lang')
     results = {'timestamp': now,
                'duration': now - then,
                **child.grammar,
-               **args,
-               **experiment.get_parameters()}
+               **params}
+
+    logging.debug('experiment results: %s', results)
 
     return results
 
@@ -140,6 +144,10 @@ def run_simulations(colag_domain_file: str,
                     languages: List[int],
                     noise_levels: List[float],
                     num_children: int,
+                    numberofsentences: int,
+                    rate: float,
+                    conservativerate: float,
+                    threshold: float,
                     show_progress=True):
     """Runs echild simulations with given parameters across all available
     processors. Returns a generator that yields one result dictionary (as
@@ -148,17 +156,20 @@ def run_simulations(colag_domain_file: str,
     """
 
     tasks = [
-        {'lang': lang, 'noise': noise}  # this dict gets passed to
-                                        # run_trial()
+        SimulationParameters(
+            language=lang,
+            noise=noise,
+            rate=rate,
+            numberofsentences=numberofsentences,
+            conservativerate=conservativerate,
+            threshold=threshold
+        )
         for lang in languages
         for noise in noise_levels
         for _ in range(num_children)
     ]
 
     init_domains(colag_domain_file, languages)
-
-    logging.info('starting simulation with languages=%s, noise_levels=%s, num_children=%s, params=%s',
-                 languages, noise_levels, num_children, TrialRunner.get_parameters(TrialRunner))
 
     with multiprocessing.Pool() as p:
         results = p.imap_unordered(run_trial, tasks)
@@ -167,19 +178,60 @@ def run_simulations(colag_domain_file: str,
         yield from results
 
 
+def parse_arguments():
+    parser = argparse.ArgumentParser()
+    parser.add_argument('-r', '--rate',
+                        type=float,
+                        default=ExperimentDefaults.rate)
+    parser.add_argument('-c', '--cons-rate',
+                        type=float,
+                        default=ExperimentDefaults.conservativerate)
+    parser.add_argument('-t', '--threshold',
+                        type=float,
+                        default=ExperimentDefaults.threshold)
+    parser.add_argument('-n', '--num-sents',
+                        type=int,
+                        default=ExperimentDefaults.numberofsentences)
+    parser.add_argument('-l', '--noise-levels', nargs="+", type=float,
+                        default=ExperimentDefaults.noise_levels)
+    parser.add_argument('-v', '--verbose', default=False, action='store_const', const=True)
+    return parser.parse_args()
+
+
 def main():
+    args = parse_arguments()
+
+    logging.info('starting simulation with %s', args.__dict__)
+
     results = run_simulations(
+        rate=args.rate,
+        conservativerate=args.cons_rate,
+        numberofsentences=args.num_sents,
+        threshold=args.threshold,
         colag_domain_file='orig4.txt',
         languages=[Language.English, Language.French, Language.German, Language.Japanese],
-        noise_levels=[0, 0.05, 0.10, 0.25, 0.50],
+        noise_levels=args.noise_levels,
         num_children=100)
 
-    csv_columns = ["lang", "noise", "SP", "HIP", "HCP", "OPT", "NS",
-                   "NT", "WHM", "PI", "TM", "VtoI", "ItoC", "AH",
-                   "QInv", "threshold", "rate", "numberofsentences",
-                   "conservativerate", "timestamp", "duration"]
+    if args.verbose:
+        logging.getLogger().setLevel(logging.DEBUG)
 
-    with open('output.csv', 'w') as fh:
+    param_fields = [field.name for field in
+                    dataclasses.fields(SimulationParameters)]
+
+    csv_columns = [*param_fields, "SP", "HIP", "HCP", "OPT", "NS", "NT", "WHM",
+                   "PI", "TM", "VtoI", "ItoC", "AH", "QInv", "timestamp",
+                   "duration"]
+
+    output_name = 'output_{timestamp}_rate:{rate}_consrate:{cons_rate}.csv'.format(
+        timestamp=datetime.now().strftime('%F:%R'),
+        rate=args.rate,
+        cons_rate=args.cons_rate
+    )
+
+    logging.info('writing results to %s', output_name)
+
+    with open(output_name, 'w') as fh:
         writer = csv.DictWriter(fh, fieldnames=csv_columns)
         writer.writeheader()
         for result in results:
