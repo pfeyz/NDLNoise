@@ -155,26 +155,28 @@ def run_simulations(colag_domain_file: str,
 
     """
 
-    tasks = [
+    tasks = (
         SimulationParameters(
             language=lang,
             noise=noise,
             rate=rate,
             numberofsentences=numberofsentences,
             conservativerate=conservativerate,
-            threshold=threshold
-        )
+            threshold=threshold)
+
         for lang in languages
         for noise in noise_levels
         for _ in range(num_children)
-    ]
+    )
+
+    num_tasks = num_children * len(languages) * len(noise_levels)
 
     init_domains(colag_domain_file, languages)
 
     with multiprocessing.Pool() as p:
         results = p.imap_unordered(run_trial, tasks)
         if show_progress:
-            results = progress_bar(results, total=len(tasks))
+            results = progress_bar(results, total=num_tasks)
         yield from results
 
 
