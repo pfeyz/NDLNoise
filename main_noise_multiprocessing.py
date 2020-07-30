@@ -20,13 +20,13 @@ DOMAINS = {}  # will contain mappngs between language ids and (language, noise)
 
 
 class Language:
-    English = '611'
-    French = '584'
-    German = '2253'
-    Japanese = '3856'
+    English = 611
+    French = 584
+    German = 2253
+    Japanese = 3856
 
 
-def create_language_domain(language: str):
+def create_language_domain(language: int):
     """Returns a tuple of (language_domain, noise_domain)
 
     `language_domain` contains all sentences in the language defined by
@@ -44,14 +44,14 @@ def create_language_domain(language: str):
         sentenceStr = sentenceStr[1:-1].rstrip()
         inflStr = inflStr[1:-1]
         s = Sentence([grammStr, inflStr, sentenceStr])
-        if grammStr == language:
+        if int(grammStr) == language:
             language_domain.append(s)
         else:
             noise_domain.append(s)
     return language_domain, noise_domain
 
 
-def init_domains(languages: List[str]):
+def init_domains(languages: List[int]):
     """Populates the global DOMAINS dictionary with the languages listed in
     `languages`. This dict will be available to subprocesses.
 
@@ -78,7 +78,7 @@ class TrialRunner:
     numberofsentences = 500000
     threshold = 0.001
 
-    def __init__(self, language: str, noise: float):
+    def __init__(self, language: int, noise: float):
         self.language = language
         self.noise_percentage = noise
         self.language_domain, self.noise_domain = DOMAINS[self.language]
@@ -123,7 +123,7 @@ def run_trial(args):
     return results
 
 
-def run_simulations(languages: List[str],
+def run_simulations(languages: List[int],
                     noise_levels: List[float],
                     num_children: int,
                     show_progress=True):
@@ -143,8 +143,8 @@ def run_simulations(languages: List[str],
 
     init_domains(languages)
 
-    logging.info('starting simulation with languages=%s, noise_levels=%s, num_children=%s, params=%s',
-                 languages, noise_levels, num_children, TrialRunner.get_parameters(TrialRunner))
+    # logging.info('starting simulation with languages=%s, noise_levels=%s, num_children=%s, params=%s',
+    #              languages, noise_levels, num_children, TrialRunner.get_parameters(TrialRunner))
 
     with multiprocessing.Pool() as p:
         results = p.imap_unordered(run_trial, tasks)
