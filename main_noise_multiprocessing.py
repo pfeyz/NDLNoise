@@ -109,13 +109,16 @@ def run_trial(args):
     logging.debug('running echild with %s', args)
 
     experiment = TrialRunner(args['lang'], args['noise'])
+    then = datetime.now()
     child = experiment.run_child()
+    now = datetime.now()
 
     logging.debug('echild learned %s', child.grammar)
 
     # TODO: define a more explicit SimulationResult class or something with
     # known fields.
-    results = {'timestamp': datetime.now(),
+    results = {'timestamp': now,
+               'duration': now - then,
                **child.grammar,
                **args,
                **experiment.get_parameters()}
@@ -134,11 +137,11 @@ def run_simulations(languages: List[int],
     """
 
     tasks = [
-        {'lang': lang, 'noise': noise, 'run': run}  # this dict gets passed to
-                                                    # run_trial()
+        {'lang': lang, 'noise': noise}  # this dict gets passed to
+                                        # run_trial()
         for lang in languages
         for noise in noise_levels
-        for run in range(num_children)
+        for _ in range(num_children)
     ]
 
     init_domains(languages)
@@ -159,10 +162,10 @@ def main():
         noise_levels=[0, 0.05, 0.10, 0.25, 0.50],
         num_children=100)
 
-    csv_columns = ["lang", "run", "noise", "SP", "HIP", "HCP", "OPT", "NS",
+    csv_columns = ["lang", "noise", "SP", "HIP", "HCP", "OPT", "NS",
                    "NT", "WHM", "PI", "TM", "VtoI", "ItoC", "AH",
                    "QInv", "threshold", "rate", "numberofsentences",
-                   "conservativerate", "timestamp"]
+                   "conservativerate", "timestamp", "duration"]
 
     with open('output.csv', 'w') as fh:
         writer = csv.DictWriter(fh, fieldnames=csv_columns)
