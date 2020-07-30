@@ -146,8 +146,8 @@ def run_simulations(languages: List[int],
 
     init_domains(languages)
 
-    # logging.info('starting simulation with languages=%s, noise_levels=%s, num_children=%s, params=%s',
-    #              languages, noise_levels, num_children, TrialRunner.get_parameters(TrialRunner))
+    logging.info('starting simulation with languages=%s, noise_levels=%s, num_children=%s, params=%s',
+                 languages, noise_levels, num_children, TrialRunner.get_parameters(TrialRunner))
 
     with multiprocessing.Pool() as p:
         results = p.imap_unordered(run_trial, tasks)
