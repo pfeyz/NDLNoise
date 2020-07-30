@@ -10,6 +10,7 @@ from random import choice, random
 from typing import List
 
 from NDChild import NDChild
+from InstrumentedChild import InstrumentedNDChild
 from Sentence import Sentence
 
 
@@ -107,7 +108,7 @@ def progress_bar(iterable, **kwargs):
 def run_child(language, noise, rate, conservativerate, numberofsentences,
               threshold):
 
-    aChild = NDChild(rate, conservativerate, language)
+    aChild = InstrumentedNDChild(rate, conservativerate, language)
     language_domain, noise_domain = DOMAINS[language]
 
     for i in range(numberofsentences):
@@ -172,6 +173,7 @@ def run_simulations(colag_domain_file: str,
     num_tasks = num_children * len(languages) * len(noise_levels)
 
     init_domains(colag_domain_file, languages)
+    InstrumentedNDChild.precompute(DOMAINS, rate, conservativerate)
 
     with multiprocessing.Pool() as p:
         results = p.imap_unordered(run_trial, tasks)
