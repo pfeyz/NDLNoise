@@ -22,6 +22,7 @@ class ExperimentDefaults:
     conservativerate = 0.0005
     numberofsentences = 500000
     threshold = 0.001
+    numechildren = 100
     noise_levels = [0, 0.05, 0.10, 0.25, 0.50]
 
 
@@ -141,13 +142,14 @@ def run_trial(params: SimulationParameters):
 
 
 def run_simulations(colag_domain_file: str,
+                    num_echildren: int,
                     languages: List[int],
                     noise_levels: List[float],
-                    num_children: int,
                     numberofsentences: int,
                     rate: float,
                     conservativerate: float,
                     threshold: float,
+                    num_procs: int,
                     show_progress=True):
     """Runs echild simulations with given parameters across all available
     processors. Returns a generator that yields one result dictionary (as
@@ -166,17 +168,18 @@ def run_simulations(colag_domain_file: str,
 
         for lang in languages
         for noise in noise_levels
-        for _ in range(num_children)
+        for _ in range(num_echildren)
     )
 
-    num_tasks = num_children * len(languages) * len(noise_levels)
+    num_tasks = num_echildren * len(languages) * len(noise_levels)
 
     init_domains(colag_domain_file, languages)
 
-    with multiprocessing.Pool() as p:
+    with multiprocessing.Pool(num_procs) as p:
         results = p.imap_unordered(run_trial, tasks)
         if show_progress:
-            results = progress_bar(results, total=num_tasks)
+            results = progress_bar(results, total=num_tasks,
+                                   desc="running simulations")
         yield from results
 
 
@@ -188,15 +191,24 @@ def parse_arguments():
     parser.add_argument('-c', '--cons-rate',
                         type=float,
                         default=ExperimentDefaults.conservativerate)
+    parser.add_argument('-e', '--num-echildren',
+                        type=int,
+                        help='number of echildren per language/noise-level',
+                        default=ExperimentDefaults.numechildren)
     parser.add_argument('-t', '--threshold',
                         type=float,
                         default=ExperimentDefaults.threshold)
-    parser.add_argument('-n', '--num-sents',
+    parser.add_argument('-s', '--num-sents',
                         type=int,
                         default=ExperimentDefaults.numberofsentences)
-    parser.add_argument('-l', '--noise-levels', nargs="+", type=float,
+    parser.add_argument('-n', '--noise-levels', nargs="+", type=float,
                         default=ExperimentDefaults.noise_levels)
-    parser.add_argument('-v', '--verbose', default=False, action='store_const', const=True)
+    parser.add_argument('-p', '--num-procs', type=int,
+                        help='number of concurrent processes to run',
+                        default=multiprocessing.cpu_count())
+    parser.add_argument('-v', '--verbose', default=False,
+                        action='store_const', const=True,
+                        help='Output per-echild debugging info')
     return parser.parse_args()
 
 
@@ -210,10 +222,12 @@ def main():
         conservativerate=args.cons_rate,
         numberofsentences=args.num_sents,
         threshold=args.threshold,
+        noise_levels=args.noise_levels,
+        num_procs=args.num_procs,
+        num_echildren=args.num_echildren,
         colag_domain_file='orig4.txt',
         languages=[Language.English, Language.French, Language.German, Language.Japanese],
-        noise_levels=args.noise_levels,
-        num_children=100)
+    )
 
     if args.verbose:
         logging.getLogger().setLevel(logging.DEBUG)
