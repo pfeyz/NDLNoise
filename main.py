@@ -83,18 +83,18 @@ def create_language_domain(colag_domain_flat_file, language: int):
         sent = Sentence([source['grammID'],
                          source['illoc'],
                          source['sent'],
-                         source['structID']])
+                         source['sentID']])
         if int(source['grammID']) == language:
             language_domain.append(sent)
         else:
-            noise_dict[source['structID']].append(sent)
+            noise_dict[source['sentID']].append(sent)
 
     if len(language_domain) == 0:
         raise LanguageNotFound('language %s not found in domain' % language)
 
     for s in language_domain:
         # drop sentences from noise domain that overlap with `language`
-        noise_dict.pop(s.struct, None)
+        noise_dict.pop(s.sentID, None)
 
     # flatten noise dict in to list
     noise_domain = [s
