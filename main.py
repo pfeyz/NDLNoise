@@ -57,9 +57,17 @@ class Language:
     Japanese = 3856
 
 
-DOMAINS = {}  # will contain mappings between language ids and (language, noise)
+# The following 3 collections are global so that they may be accessed by
+# subprocesses without requiring sending copies.
 
-# domain pairs
+# will contain mappings between language ids and a list of Sentence objects
+DOMAINS = {}
+
+# maps from grammar id -> set of sentIDs
+SENTIDS_IN_LANG = {}
+
+# contains every sentence in colag
+ALL_SENTENCES = []
 
 
 class LanguageNotFound(Exception):
@@ -70,52 +78,32 @@ class LanguageNotFound(Exception):
     pass
 
 
-def create_language_domain(colag_domain_flat_file, language: int):
-    language_domain = []
-
-    # keys are struct IDS, values are list of sentences. once we gather all the
-    # sentences from `language`, we will remove those form the noise_domain
-    # that have the same struct id.
-    noise_dict = defaultdict(list)
-
-    for line in colag_domain_flat_file:
-        source = COLAG_FLAT_FILE_RE.match(line).groupdict()
-        sent = Sentence([source['grammID'],
-                         source['illoc'],
-                         source['sent'],
-                         source['sentID']])
-        if int(source['grammID']) == language:
-            language_domain.append(sent)
-        else:
-            noise_dict[source['sentID']].append(sent)
-
-    if len(language_domain) == 0:
-        raise LanguageNotFound('language %s not found in domain' % language)
-
-    for s in language_domain:
-        # drop sentences from noise domain that overlap with `language`
-        noise_dict.pop(s.sentID, None)
-
-    # flatten noise dict in to list
-    noise_domain = [s
-                    for sents in noise_dict.values()
-                    for s in sents]
-
-    return language_domain, noise_domain
-
-
-def init_domains(domain_file, languages: List[int]):
-    """Populates the global DOMAINS dictionary with the languages listed in
-    `languages`. This dict will be available to subprocesses.
+def init_domains(domain_file, rate, conservativerate):
+    """Populates the global DOMAINS, SENTIDS_IN_LANG and ALL_SENTENCES collections.
 
     """
-    logging.info('generating language and noise domains for %s', languages)
+    logging.info('generating languages')
     with open(domain_file, 'r') as fh:
-        colag_domain = list(fh)
-        for lang in progress_bar(languages, total=len(languages),
-                                 desc='initializing language domains'):
-            print(lang)
-            DOMAINS[lang] = create_language_domain(colag_domain, lang)
+        for line in progress_bar(fh, total=3081164):
+            source = COLAG_FLAT_FILE_RE.match(line).groupdict()
+            sent = Sentence([source['grammID'],
+                             source['illoc'],
+                             source['sent'],
+                             source['sentID']])
+            InstrumentedNDChild.precompute_sentence(sent, rate, conservativerate)
+            language = int(sent.language)
+
+            try:
+                DOMAINS[language].append(sent)
+            except KeyError:
+                DOMAINS[language] = [sent]
+
+            try:
+                SENTIDS_IN_LANG[language].add(sent.sentID)
+            except KeyError:
+                SENTIDS_IN_LANG[language] = {sent.sentID}
+
+            ALL_SENTENCES.append(sent)
 
 
 def progress_bar(iterable, **kwargs):
@@ -131,11 +119,17 @@ def run_child(language, noise, rate, conservativerate, numberofsentences,
               threshold):
 
     aChild = InstrumentedNDChild(rate, conservativerate, language)
-    language_domain, noise_domain = DOMAINS[language]
+    language_domain = DOMAINS[language]
+    sentIDS = SENTIDS_IN_LANG[language]
 
     for i in range(numberofsentences):
         if random() < noise:
-            s = choice(noise_domain)
+            # sample sentences from the entire domain until we find one whose
+            # sentence ID is not in our language.
+            while True:
+                s = choice(ALL_SENTENCES)
+                if s.sentID not in sentIDS:
+                    break
         else:
             s = choice(language_domain)
         aChild.consumeSentence(s)
@@ -195,8 +189,8 @@ def run_simulations(colag_domain_file: str,
 
     num_tasks = num_echildren * len(languages) * len(noise_levels)
 
-    init_domains(colag_domain_file, languages)
-    InstrumentedNDChild.precompute(DOMAINS, rate, conservativerate)
+    init_domains(colag_domain_file, rate, conservativerate)
+    # InstrumentedNDChild.precompute(DOMAINS, rate, conservativerate)
 
     with multiprocessing.Pool(num_procs) as p:
         results = p.imap_unordered(run_trial, tasks)

@@ -19,14 +19,12 @@ class NDMeta(type):
 
 class InstrumentedNDChild(NDChild): #, metaclass=NDMeta):
 
-    @classmethod
-    def precompute(cls, domains, rate, conservativerate):
-        for language in domains.values():
-            for sentence in language[0]:
-                child = NDChild(rate, conservativerate, 611)
-                child.adjustweight = lambda param, direction, weight: (
-                    set_trigger(sentence, param, direction, weight))
-                child.consumeSentence(sentence)
+    @staticmethod
+    def precompute_sentence(sentence, rate, conservativerate):
+        child = NDChild(rate, conservativerate, 611)
+        child.adjustweight = lambda param, direction, weight: (
+            set_trigger(sentence, param, direction, weight))
+        child.consumeSentence(sentence)
 
     def trigger(self, param, s):
         if param in s.triggers:
