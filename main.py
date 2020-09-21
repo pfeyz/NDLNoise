@@ -15,6 +15,7 @@ from NDChild import NDChild
 from InstrumentedChild import InstrumentedNDChild
 from Sentence import Sentence
 
+
 COLAG_FLAT_FILE_RE = re.compile(r"""
 (?P<gramm>[01]+)\s
 (?P<illoc>[A-Z]+)\s*\t\s*
@@ -134,7 +135,7 @@ def run_child(language, noise, rate, conservativerate, numberofsentences,
             s = choice(language_domain)
         aChild.consumeSentence(s)
 
-    return aChild
+    # return aChild
 
 
 def run_trial(params: SimulationParameters):
@@ -146,10 +147,10 @@ def run_trial(params: SimulationParameters):
     child = run_child(**params)
     now = datetime.now()
 
-    child.grammar['language'] = child.grammar.pop('lang')
+    # child.grammar['language'] = child.grammar.pop('lang')
     results = {'timestamp': now,
                'duration': now - then,
-               **child.grammar,
+               # **child.grammar,
                **params}
 
     logging.debug('experiment results: %s', results)
@@ -268,7 +269,8 @@ def main():
         writer = csv.DictWriter(fh, fieldnames=csv_columns)
         writer.writeheader()
         for result in results:
-            writer.writerow(result)
+            pass
+            # writer.writerow(result)
 
 
 if __name__ == "__main__":
