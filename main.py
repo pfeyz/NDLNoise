@@ -5,6 +5,8 @@ import csv
 import dataclasses
 import logging
 import multiprocessing
+import re
+from collections import defaultdict
 from datetime import datetime
 from random import choice, random
 from typing import List
@@ -12,6 +14,16 @@ from typing import List
 from NDChild import NDChild
 from InstrumentedChild import InstrumentedNDChild
 from Sentence import Sentence
+
+COLAG_FLAT_FILE_RE = re.compile(r"""
+(?P<gramm>[01]+)\s
+(?P<illoc>[A-Z]+)\s*\t\s*
+(?P<sent>.*?)\s*\t\s*
+(?P<struct>.*\))\s+
+(?P<grammID>\d+)\s+
+(?P<sentID>\d+)\s+
+(?P<structID>\d+)\s*$
+""", re.VERBOSE)
 
 
 logging.basicConfig(level=logging.INFO)
@@ -46,7 +58,8 @@ class Language:
 
 
 DOMAINS = {}  # will contain mappings between language ids and (language, noise)
-              # domain pairs
+
+# domain pairs
 
 
 class LanguageNotFound(Exception):
@@ -57,30 +70,37 @@ class LanguageNotFound(Exception):
     pass
 
 
-def create_language_domain(colag_domain, language: int):
-    """Returns a tuple of (language_domain, noise_domain)
-
-    `language_domain` contains all sentences in the language defined by
-    language id `language`.
-
-    `noise_domain` contains all sentences in COLAG_DOMAIN_FILE that are not in
-    `language_domain`.
-
-    """
-
+def create_language_domain(colag_domain_flat_file, language: int):
     language_domain = []
-    noise_domain = []
-    for line in colag_domain:
-        [gramm01, inflStr, sentenceStr, grammStr, sentID, struID] = line.split("\t")
-        sentenceStr = sentenceStr[1:-1].rstrip()
-        inflStr = inflStr[1:-1]
-        s = Sentence([grammStr, inflStr, sentenceStr])
-        if int(grammStr) == language:
-            language_domain.append(s)
+
+    # keys are struct IDS, values are list of sentences. once we gather all the
+    # sentences from `language`, we will remove those form the noise_domain
+    # that have the same struct id.
+    noise_dict = defaultdict(list)
+
+    for line in colag_domain_flat_file:
+        source = COLAG_FLAT_FILE_RE.match(line).groupdict()
+        sent = Sentence([source['grammID'],
+                         source['illoc'],
+                         source['sent'],
+                         source['structID']])
+        if int(source['grammID']) == language:
+            language_domain.append(sent)
         else:
-            noise_domain.append(s)
+            noise_dict[source['structID']].append(sent)
+
     if len(language_domain) == 0:
         raise LanguageNotFound('language %s not found in domain' % language)
+
+    for s in language_domain:
+        # drop sentences from noise domain that overlap with `language`
+        noise_dict.pop(s.struct, None)
+
+    # flatten noise dict in to list
+    noise_domain = [s
+                    for sents in noise_dict.values()
+                    for s in sents]
+
     return language_domain, noise_domain
 
 
@@ -94,6 +114,7 @@ def init_domains(domain_file, languages: List[int]):
         colag_domain = list(fh)
         for lang in progress_bar(languages, total=len(languages),
                                  desc='initializing language domains'):
+            print(lang)
             DOMAINS[lang] = create_language_domain(colag_domain, lang)
 
 
@@ -227,7 +248,7 @@ def main():
         noise_levels=args.noise_levels,
         num_procs=args.num_procs,
         num_echildren=args.num_echildren,
-        colag_domain_file='orig4.txt',
+        colag_domain_file='COLAG_2011_flat.txt',
         languages=[Language.English, Language.French, Language.German, Language.Japanese],
     )
 
