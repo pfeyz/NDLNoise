@@ -9,7 +9,7 @@ class Sentence(object):
         self.inflection = infoList[1]
         self.sentenceStr = infoList [2]
         self.sentenceList = infoList[2].split()
-        self.sentID = infoList[3]
+        self.sentID = int(infoList[3])
         self.triggers = {}
 
         O1index = self.indexStringFull("O1")

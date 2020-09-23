@@ -60,14 +60,11 @@ class Language:
 # The following 3 collections are global so that they may be accessed by
 # subprocesses without requiring sending copies.
 
-# will contain mappings between language ids and a list of Sentence objects
+# maps from grammar id -> list of sentIDs
 DOMAINS = {}
 
-# maps from grammar id -> set of sentIDs
-SENTIDS_IN_LANG = {}
-
-# contains every sentence in colag
-ALL_SENTENCES = []
+# contains mappings from sentence IDs to sentence objects
+ALL_SENTENCES = {}
 
 
 class LanguageNotFound(Exception):
@@ -83,6 +80,7 @@ def init_domains(domain_file, rate, conservativerate):
 
     """
     logging.info('generating languages')
+    count = 0
     with open(domain_file, 'r') as fh:
         for line in progress_bar(fh, total=3081164):
             source = COLAG_FLAT_FILE_RE.match(line).groupdict()
@@ -90,20 +88,21 @@ def init_domains(domain_file, rate, conservativerate):
                              source['illoc'],
                              source['sent'],
                              source['sentID']])
-            InstrumentedNDChild.precompute_sentence(sent, rate, conservativerate)
             language = int(sent.language)
 
             try:
-                DOMAINS[language].append(sent)
+                DOMAINS[language].append(sent.sentID)
             except KeyError:
-                DOMAINS[language] = [sent]
+                DOMAINS[language] = [sent.sentID]
 
-            try:
-                SENTIDS_IN_LANG[language].add(sent.sentID)
-            except KeyError:
-                SENTIDS_IN_LANG[language] = {sent.sentID}
+            InstrumentedNDChild.precompute_sentence(sent, rate, conservativerate)
 
-            ALL_SENTENCES.append(sent)
+            ALL_SENTENCES[sent.sentID] = sent
+            count += 1
+    logging.info('%s languages, %s sentence types, %s sentence tokens',
+                 len(DOMAINS),
+                 len(ALL_SENTENCES),
+                 count)
 
 
 def progress_bar(iterable, **kwargs):
@@ -120,7 +119,6 @@ def run_child(language, noise, rate, conservativerate, numberofsentences,
 
     aChild = InstrumentedNDChild(rate, conservativerate, language)
     language_domain = DOMAINS[language]
-    sentIDS = SENTIDS_IN_LANG[language]
 
     for i in range(numberofsentences):
         if random() < noise:
@@ -128,10 +126,11 @@ def run_child(language, noise, rate, conservativerate, numberofsentences,
             # sentence ID is not in our language.
             while True:
                 s = choice(ALL_SENTENCES)
-                if s.sentID not in sentIDS:
+                if s.sentID not in language_domain:
                     break
         else:
-            s = choice(language_domain)
+            sentID = choice(language_domain)
+            s = ALL_SENTENCES[sentID]
         aChild.consumeSentence(s)
 
     return aChild
