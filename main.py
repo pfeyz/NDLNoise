@@ -5,28 +5,19 @@ import csv
 import dataclasses
 import logging
 import multiprocessing
-import re
-from collections import defaultdict
 from datetime import datetime
 from random import choice, random
 from typing import List
 
 from NDChild import NDChild
+from domain import ColagDomain
 from InstrumentedChild import InstrumentedNDChild
 from Sentence import Sentence
-
-COLAG_FLAT_FILE_RE = re.compile(r"""
-(?P<gramm>[01]+)\s
-(?P<illoc>[A-Z]+)\s*\t\s*
-(?P<sent>.*?)\s*\t\s*
-(?P<struct>.*\))\s+
-(?P<grammID>\d+)\s+
-(?P<sentID>\d+)\s+
-(?P<structID>\d+)\s*$
-""", re.VERBOSE)
-
+from utils import progress_bar
 
 logging.basicConfig(level=logging.INFO)
+
+DOMAIN = ColagDomain()
 
 
 class ExperimentDefaults:
@@ -57,16 +48,6 @@ class Language:
     Japanese = 3856
 
 
-# The following 3 collections are global so that they may be accessed by
-# subprocesses without requiring sending copies.
-
-# maps from grammar id -> list of sentIDs
-DOMAINS = {}
-
-# contains mappings from sentence IDs to sentence objects
-ALL_SENTENCES = {}
-
-
 class LanguageNotFound(Exception):
     """Raised when a user attempts to read a language that does not exist in domain
     file.
@@ -75,62 +56,16 @@ class LanguageNotFound(Exception):
     pass
 
 
-def init_domains(domain_file, rate, conservativerate):
-    """Populates the global DOMAINS, SENTIDS_IN_LANG and ALL_SENTENCES collections.
-
-    """
-    logging.info('generating languages')
-    count = 0
-    with open(domain_file, 'r') as fh:
-        for line in progress_bar(fh, total=3081164):
-            source = COLAG_FLAT_FILE_RE.match(line).groupdict()
-            sent = Sentence([source['grammID'],
-                             source['illoc'],
-                             source['sent'],
-                             source['sentID']])
-            language = int(sent.language)
-
-            try:
-                DOMAINS[language].append(sent.sentID)
-            except KeyError:
-                DOMAINS[language] = [sent.sentID]
-
-            InstrumentedNDChild.precompute_sentence(sent, rate, conservativerate)
-
-            ALL_SENTENCES[sent.sentID] = sent
-            count += 1
-    logging.info('%s languages, %s sentence types, %s sentence tokens',
-                 len(DOMAINS),
-                 len(ALL_SENTENCES),
-                 count)
-
-
-def progress_bar(iterable, **kwargs):
-    """ If tqdm is installed, Reports progress on the generation of `iterable` """
-    try:
-        import tqdm
-    except ImportError:
-        return iterable
-    return tqdm.tqdm(iterable, **kwargs)
-
-
 def run_child(language, noise, rate, conservativerate, numberofsentences,
               threshold):
 
     aChild = InstrumentedNDChild(rate, conservativerate, language)
-    language_domain = DOMAINS[language]
 
     for i in range(numberofsentences):
         if random() < noise:
-            # sample sentences from the entire domain until we find one whose
-            # sentence ID is not in our language.
-            while True:
-                s = choice(ALL_SENTENCES)
-                if s.sentID not in language_domain:
-                    break
+            s = DOMAIN.get_sentence_not_in_language(grammar_id=language)
         else:
-            sentID = choice(language_domain)
-            s = ALL_SENTENCES[sentID]
+            s = DOMAIN.get_sentence_in_language(grammar_id=language)
         aChild.consumeSentence(s)
 
     return aChild
@@ -188,8 +123,7 @@ def run_simulations(colag_domain_file: str,
 
     num_tasks = num_echildren * len(languages) * len(noise_levels)
 
-    init_domains(colag_domain_file, rate, conservativerate)
-    # InstrumentedNDChild.precompute(DOMAINS, rate, conservativerate)
+    DOMAIN.read_domain_file(colag_domain_file, rate, conservativerate)
 
     with multiprocessing.Pool(num_procs) as p:
         results = p.imap_unordered(run_trial, tasks)
