@@ -24,7 +24,10 @@ COLAG_FLAT_FILE_RE = re.compile(r"""
 
 
 class ColagDomain:
+    # maps from grammar ids -> list of sentence ids
     languages: Dict[GrammarId, List[SentenceId]]
+
+    # maps from sentence ids -> sentence objects
     sentences: Dict[SentenceId, Sentence]
 
     def __init__(self):
@@ -32,11 +35,8 @@ class ColagDomain:
         self.sentences = {}
 
     def read_domain_file(self, domain_file, rate, conservativerate):
-        """Populates the global DOMAINS, SENTIDS_IN_LANG and ALL_SENTENCES collections.
-
-        """
         logging.info('generating languages')
-        count = 0
+        token_count = 0
         with open(domain_file, 'r') as fh:
             for line in progress_bar(fh, total=3081164):
                 source = COLAG_FLAT_FILE_RE.match(line).groupdict()
@@ -54,11 +54,11 @@ class ColagDomain:
                 InstrumentedNDChild.precompute_sentence(sent, rate, conservativerate)
 
                 self.sentences[sent.sentID] = sent
-                count += 1
+                token_count += 1
         logging.info('%s languages, %s sentence types, %s sentence tokens',
                      len(self.languages),
                      len(self.sentences),
-                     count)
+                     token_count)
 
     def get_sentence_not_in_language(self, grammar_id: GrammarId):
         while True:

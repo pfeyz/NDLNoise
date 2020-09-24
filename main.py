@@ -6,13 +6,11 @@ import dataclasses
 import logging
 import multiprocessing
 from datetime import datetime
-from random import choice, random
+from random import random
 from typing import List
 
-from NDChild import NDChild
 from domain import ColagDomain
 from InstrumentedChild import InstrumentedNDChild
-from Sentence import Sentence
 from utils import progress_bar
 
 logging.basicConfig(level=logging.INFO)
