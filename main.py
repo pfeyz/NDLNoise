@@ -5,28 +5,17 @@ import csv
 import dataclasses
 import logging
 import multiprocessing
-import re
-from collections import defaultdict
 from datetime import datetime
-from random import choice, random
+from random import random
 from typing import List
 
-from NDChild import NDChild
+from domain import ColagDomain
 from InstrumentedChild import InstrumentedNDChild
-from Sentence import Sentence
-
-COLAG_FLAT_FILE_RE = re.compile(r"""
-(?P<gramm>[01]+)\s
-(?P<illoc>[A-Z]+)\s*\t\s*
-(?P<sent>.*?)\s*\t\s*
-(?P<struct>.*\))\s+
-(?P<grammID>\d+)\s+
-(?P<sentID>\d+)\s+
-(?P<structID>\d+)\s*$
-""", re.VERBOSE)
-
+from utils import progress_bar
 
 logging.basicConfig(level=logging.INFO)
+
+DOMAIN = ColagDomain()
 
 
 class ExperimentDefaults:
@@ -57,11 +46,6 @@ class Language:
     Japanese = 3856
 
 
-DOMAINS = {}  # will contain mappings between language ids and (language, noise)
-
-# domain pairs
-
-
 class LanguageNotFound(Exception):
     """Raised when a user attempts to read a language that does not exist in domain
     file.
@@ -70,74 +54,16 @@ class LanguageNotFound(Exception):
     pass
 
 
-def create_language_domain(colag_domain_flat_file, language: int):
-    language_domain = []
-
-    # keys are struct IDS, values are list of sentences. once we gather all the
-    # sentences from `language`, we will remove those form the noise_domain
-    # that have the same struct id.
-    noise_dict = defaultdict(list)
-
-    for line in colag_domain_flat_file:
-        source = COLAG_FLAT_FILE_RE.match(line).groupdict()
-        sent = Sentence([source['grammID'],
-                         source['illoc'],
-                         source['sent'],
-                         source['sentID']])
-        if int(source['grammID']) == language:
-            language_domain.append(sent)
-        else:
-            noise_dict[source['sentID']].append(sent)
-
-    if len(language_domain) == 0:
-        raise LanguageNotFound('language %s not found in domain' % language)
-
-    for s in language_domain:
-        # drop sentences from noise domain that overlap with `language`
-        noise_dict.pop(s.sentID, None)
-
-    # flatten noise dict in to list
-    noise_domain = [s
-                    for sents in noise_dict.values()
-                    for s in sents]
-
-    return language_domain, noise_domain
-
-
-def init_domains(domain_file, languages: List[int]):
-    """Populates the global DOMAINS dictionary with the languages listed in
-    `languages`. This dict will be available to subprocesses.
-
-    """
-    logging.info('generating language and noise domains for %s', languages)
-    with open(domain_file, 'r') as fh:
-        colag_domain = list(fh)
-        for lang in progress_bar(languages, total=len(languages),
-                                 desc='initializing language domains'):
-            print(lang)
-            DOMAINS[lang] = create_language_domain(colag_domain, lang)
-
-
-def progress_bar(iterable, **kwargs):
-    """ If tqdm is installed, Reports progress on the generation of `iterable` """
-    try:
-        import tqdm
-    except ImportError:
-        return iterable
-    return tqdm.tqdm(iterable, **kwargs)
-
-
 def run_child(language, noise, rate, conservativerate, numberofsentences,
               threshold):
 
     aChild = InstrumentedNDChild(rate, conservativerate, language)
-    language_domain, noise_domain = DOMAINS[language]
 
     for i in range(numberofsentences):
         if random() < noise:
-            s = choice(noise_domain)
+            s = DOMAIN.get_sentence_not_in_language(grammar_id=language)
         else:
-            s = choice(language_domain)
+            s = DOMAIN.get_sentence_in_language(grammar_id=language)
         aChild.consumeSentence(s)
 
     return aChild
@@ -195,8 +121,7 @@ def run_simulations(colag_domain_file: str,
 
     num_tasks = num_echildren * len(languages) * len(noise_levels)
 
-    init_domains(colag_domain_file, languages)
-    InstrumentedNDChild.precompute(DOMAINS, rate, conservativerate)
+    DOMAIN.read_domain_file(colag_domain_file, rate, conservativerate)
 
     with multiprocessing.Pool(num_procs) as p:
         results = p.imap_unordered(run_trial, tasks)
