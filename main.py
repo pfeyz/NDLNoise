@@ -10,6 +10,7 @@ from random import random
 from typing import List
 
 from domain import ColagDomain
+from NDChild import NDChild
 from InstrumentedChild import InstrumentedNDChild
 from utils import progress_bar
 
@@ -57,7 +58,7 @@ class LanguageNotFound(Exception):
 def run_child(language, noise, rate, conservativerate, numberofsentences,
               threshold):
 
-    aChild = InstrumentedNDChild(rate, conservativerate, language)
+    aChild = NDChild(rate, conservativerate, language)
 
     for i in range(numberofsentences):
         if random() < noise:
