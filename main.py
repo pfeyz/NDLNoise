@@ -6,14 +6,17 @@ import dataclasses
 import logging
 import multiprocessing
 from datetime import datetime
-from random import choice, random
+from random import random
 from typing import List
 
+from domain import ColagDomain
 from NDChild import NDChild
-from Sentence import Sentence
-
+from InstrumentedChild import InstrumentedNDChild
+from utils import progress_bar
 
 logging.basicConfig(level=logging.INFO)
+
+DOMAIN = ColagDomain()
 
 
 class ExperimentDefaults:
@@ -44,10 +47,6 @@ class Language:
     Japanese = 3856
 
 
-DOMAINS = {}  # will contain mappings between language ids and (language, noise)
-              # domain pairs
-
-
 class LanguageNotFound(Exception):
     """Raised when a user attempts to read a language that does not exist in domain
     file.
@@ -56,66 +55,16 @@ class LanguageNotFound(Exception):
     pass
 
 
-def create_language_domain(colag_domain, language: int):
-    """Returns a tuple of (language_domain, noise_domain)
-
-    `language_domain` contains all sentences in the language defined by
-    language id `language`.
-
-    `noise_domain` contains all sentences in COLAG_DOMAIN_FILE that are not in
-    `language_domain`.
-
-    """
-
-    language_domain = []
-    noise_domain = []
-    for line in colag_domain:
-        [gramm01, inflStr, sentenceStr, grammStr, sentID, struID] = line.split("\t")
-        sentenceStr = sentenceStr[1:-1].rstrip()
-        inflStr = inflStr[1:-1]
-        s = Sentence([grammStr, inflStr, sentenceStr])
-        if int(grammStr) == language:
-            language_domain.append(s)
-        else:
-            noise_domain.append(s)
-    if len(language_domain) == 0:
-        raise LanguageNotFound('language %s not found in domain' % language)
-    return language_domain, noise_domain
-
-
-def init_domains(domain_file, languages: List[int]):
-    """Populates the global DOMAINS dictionary with the languages listed in
-    `languages`. This dict will be available to subprocesses.
-
-    """
-    logging.info('generating language and noise domains for %s', languages)
-    with open(domain_file, 'r') as fh:
-        colag_domain = list(fh)
-        for lang in progress_bar(languages, total=len(languages),
-                                 desc='initializing language domains'):
-            DOMAINS[lang] = create_language_domain(colag_domain, lang)
-
-
-def progress_bar(iterable, **kwargs):
-    """ If tqdm is installed, Reports progress on the generation of `iterable` """
-    try:
-        import tqdm
-    except ImportError:
-        return iterable
-    return tqdm.tqdm(iterable, **kwargs)
-
-
 def run_child(language, noise, rate, conservativerate, numberofsentences,
               threshold):
 
     aChild = NDChild(rate, conservativerate, language)
-    language_domain, noise_domain = DOMAINS[language]
 
     for i in range(numberofsentences):
         if random() < noise:
-            s = choice(noise_domain)
+            s = DOMAIN.get_sentence_not_in_language(grammar_id=language)
         else:
-            s = choice(language_domain)
+            s = DOMAIN.get_sentence_in_language(grammar_id=language)
         aChild.consumeSentence(s)
 
     return aChild
@@ -173,7 +122,7 @@ def run_simulations(colag_domain_file: str,
 
     num_tasks = num_echildren * len(languages) * len(noise_levels)
 
-    init_domains(colag_domain_file, languages)
+    DOMAIN.read_domain_file(colag_domain_file, rate, conservativerate)
 
     with multiprocessing.Pool(num_procs) as p:
         results = p.imap_unordered(run_trial, tasks)
@@ -225,7 +174,7 @@ def main():
         noise_levels=args.noise_levels,
         num_procs=args.num_procs,
         num_echildren=args.num_echildren,
-        colag_domain_file='orig4.txt',
+        colag_domain_file='COLAG_2011_flat.txt',
         languages=[Language.English, Language.French, Language.German, Language.Japanese],
     )
 
