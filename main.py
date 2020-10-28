@@ -163,7 +163,9 @@ def parse_arguments():
 def main():
     args = parse_arguments()
 
-    logging.info('starting simulation with %s', args.__dict__)
+    logging.info('starting simulation with %s',
+                 ' '.join('{}={}'.format(key, val)
+                          for key, val in args.__dict__.items()))
 
     results = run_simulations(
         rate=args.rate,
