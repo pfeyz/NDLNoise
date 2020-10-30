@@ -121,7 +121,7 @@ def run_simulations(colag_domain_file: str,
 
     num_tasks = num_echildren * len(languages) * len(noise_levels)
 
-    DOMAIN.read_domain_file(colag_domain_file, rate, conservativerate)
+    DOMAIN.init_from_flatfile(rate, conservativerate)
 
     with multiprocessing.Pool(num_procs) as p:
         results = p.imap_unordered(run_trial, tasks)
@@ -163,7 +163,9 @@ def parse_arguments():
 def main():
     args = parse_arguments()
 
-    logging.info('starting simulation with %s', args.__dict__)
+    logging.info('starting simulation with %s',
+                 ' '.join('{}={}'.format(key, val)
+                          for key, val in args.__dict__.items()))
 
     results = run_simulations(
         rate=args.rate,
