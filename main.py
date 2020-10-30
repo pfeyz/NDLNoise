@@ -1,7 +1,6 @@
 # coding: utf-8
 
 import argparse
-import csv
 import dataclasses
 import logging
 import multiprocessing
@@ -9,8 +8,9 @@ from datetime import datetime
 from random import random
 from typing import List
 
-from domain import ColagDomain
 from InstrumentedChild import InstrumentedNDChild
+from domain import ColagDomain
+from output_handler import write_results
 from utils import progress_bar
 
 logging.basicConfig(level=logging.INFO)
@@ -182,26 +182,7 @@ def main():
     if args.verbose:
         logging.getLogger().setLevel(logging.DEBUG)
 
-    param_fields = [field.name for field in
-                    dataclasses.fields(SimulationParameters)]
-
-    csv_columns = [*param_fields, "SP", "HIP", "HCP", "OPT", "NS", "NT", "WHM",
-                   "PI", "TM", "VtoI", "ItoC", "AH", "QInv", "timestamp",
-                   "duration"]
-
-    output_name = 'output_{timestamp}_rate:{rate}_consrate:{cons_rate}.csv'.format(
-        timestamp=datetime.now().strftime('%F:%R'),
-        rate=args.rate,
-        cons_rate=args.cons_rate
-    )
-
-    logging.info('writing results to %s', output_name)
-
-    with open(output_name, 'w') as fh:
-        writer = csv.DictWriter(fh, fieldnames=csv_columns)
-        writer.writeheader()
-        for result in results:
-            writer.writerow(result)
+    write_results('simulation_output', args, results)
 
 
 if __name__ == "__main__":
