@@ -19,6 +19,7 @@ logging.basicConfig(level=logging.INFO)
 SentenceId = NewType('SentenceId', int)
 GrammarId = NewType('GrammarId', int)
 
+# regex for matching a single line in the colag flat file
 COLAG_FLAT_FILE_RE = re.compile(r"""
 (?P<gramm>[01]+)\s
 (?P<illoc>[A-Z]+)\s*\t\s*
@@ -31,6 +32,7 @@ COLAG_FLAT_FILE_RE = re.compile(r"""
 
 
 def download_file(url):
+    """Downloads a file to disk and returns the resulting local filename"""
     local_filename = url.split('/')[-1]
     with requests.get(url, stream=True) as r:
         with open(local_filename, 'wb') as f:
@@ -41,7 +43,10 @@ def download_file(url):
 
 def pickled_path(domain_file):
     """Returns the expected pickled path for the domain file, with the file's hash
-    embedded in the filename."""
+    embedded in the filename. If the domain file ever changes, the hash will
+    change, which will force recomputing the domain object from the flat file.
+
+    """
     return '{}-{}.pkl'.format(domain_file, hash_file(domain_file))
 
 
@@ -57,10 +62,10 @@ def hash_file(path):
 
 
 class ColagDomain:
-    # maps from grammar ids -> list of sentence ids
+    # maps from grammar id -> list of sentence ids
     languages: Dict[GrammarId, List[SentenceId]]
 
-    # maps from sentence ids -> sentence objects
+    # maps from sentence id -> sentence objects
     sentences: Dict[SentenceId, Sentence]
 
     def __init__(self):
@@ -81,9 +86,14 @@ class ColagDomain:
             logging.info('unzipping colag flatfile')
             with zipfile.ZipFile(zipped, 'r') as zip_ref:
                 zip_ref.extractall('.')
-        self.read_domain_file(txt, rate, conservativerate)
+        self.read_domain_flatfile(txt, rate, conservativerate)
 
-    def read_domain_file(self, domain_file, rate, conservativerate):
+    def read_domain_flatfile(self, domain_file, rate, conservativerate):
+        """Populates ColagDomain object from sentences in colag flatfile
+        `domain_file`. If the file has been read before and cached locally on
+        disk as pickle, just reads and returns the cached object.
+
+        """
         pickled = pickled_path(domain_file)
         if os.path.exists(pickled):
             logging.info('reading pickled colag domain from %s' % pickled)
@@ -125,7 +135,7 @@ class ColagDomain:
 
     def get_sentence_not_in_language(self, grammar_id: GrammarId):
         while True:
-            s = choice(self.sentences)
+            s: Sentence = choice(list(self.sentences.values()))
             if s.sentID not in self.languages[grammar_id]:
                 return s
 

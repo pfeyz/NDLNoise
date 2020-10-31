@@ -73,10 +73,10 @@ def write_results(output_directory, params, results):
     """Writes simulation results to csv, plots to a pdf and writes summary stats
     to an excel file."""
 
-    from main import SimulationParameters
+    from main import TrialParameters
 
     param_fields = [
-        field.name for field in dataclasses.fields(SimulationParameters)
+        field.name for field in dataclasses.fields(TrialParameters)
     ]
 
     csv_columns = [

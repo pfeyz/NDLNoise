@@ -23,20 +23,29 @@ class ExperimentDefaults:
     rate = 0.9
     conservativerate = 0.0005
     numberofsentences = 500000
-    threshold = 0.001
     numechildren = 100
     noise_levels = [0, 0.05, 0.10, 0.25, 0.50]
 
 
 @dataclasses.dataclass
-class SimulationParameters:
+class ExperimentParameters:
+    languages: List[int]
+    noise_levels: List[float]
+    learningrate: float
+    conservative_learningrate: float
+    num_sentences: int
+    num_echildren: int
+    num_procs: int
+
+
+@dataclasses.dataclass
+class TrialParameters:
     """ The parameters for a single echild simulation """
     language: int
     noise: float
     rate: float
     conservativerate: float
     numberofsentences: int
-    threshold: float
 
 
 class Language:
@@ -54,8 +63,7 @@ class LanguageNotFound(Exception):
     pass
 
 
-def run_child(language, noise, rate, conservativerate, numberofsentences,
-              threshold):
+def run_child(language, noise, rate, conservativerate, numberofsentences):
 
     aChild = InstrumentedNDChild(rate, conservativerate, language)
 
@@ -69,65 +77,56 @@ def run_child(language, noise, rate, conservativerate, numberofsentences,
     return aChild
 
 
-def run_trial(params: SimulationParameters):
+def run_trial(params: TrialParameters):
     """ Runs a single echild simulation and reports the results """
     logging.debug('running echild with %s', params)
 
-    params = dataclasses.asdict(params)
+    params = dataclasses.asdict(params)  # type: ignore
     then = datetime.now()
-    child = run_child(**params)
+    child = run_child(**params)  # type: ignore
     now = datetime.now()
 
     child.grammar['language'] = child.grammar.pop('lang')
     results = {'timestamp': now,
                'duration': now - then,
                **child.grammar,
-               **params}
+               **params}  # type: ignore
 
     logging.debug('experiment results: %s', results)
 
     return results
 
 
-def run_simulations(colag_domain_file: str,
-                    num_echildren: int,
-                    languages: List[int],
-                    noise_levels: List[float],
-                    numberofsentences: int,
-                    rate: float,
-                    conservativerate: float,
-                    threshold: float,
-                    num_procs: int,
-                    show_progress=True):
+def run_simulations(params: ExperimentParameters):
     """Runs echild simulations with given parameters across all available
     processors. Returns a generator that yields one result dictionary (as
     returned by run_trial) for each simulation run.
 
     """
 
-    tasks = (
-        SimulationParameters(
-            language=lang,
-            noise=noise,
-            rate=rate,
-            numberofsentences=numberofsentences,
-            conservativerate=conservativerate,
-            threshold=threshold)
-
-        for lang in languages
-        for noise in noise_levels
-        for _ in range(num_echildren)
+    trials = (
+        TrialParameters(language=lang,
+                        noise=noise,
+                        rate=params.learningrate,
+                        numberofsentences=params.num_sentences,
+                        conservativerate=params.conservative_learningrate)
+        for lang in params.languages
+        for noise in params.noise_levels
+        for _ in range(params.num_echildren)
     )
 
-    num_tasks = num_echildren * len(languages) * len(noise_levels)
+    num_trials = (params.num_echildren
+                  * len(params.languages)
+                  * len(params.noise_levels))
 
-    DOMAIN.init_from_flatfile(rate, conservativerate)
+    DOMAIN.init_from_flatfile(params.learningrate,
+                              params.conservative_learningrate)
 
-    with multiprocessing.Pool(num_procs) as p:
-        results = p.imap_unordered(run_trial, tasks)
-        if show_progress:
-            results = progress_bar(results, total=num_tasks,
-                                   desc="running simulations")
+    with multiprocessing.Pool(params.num_procs) as p:
+        results = p.imap_unordered(run_trial, trials)
+        results = progress_bar(results,
+                               total=num_trials,
+                               desc="running simulations")
         yield from results
 
 
@@ -143,9 +142,6 @@ def parse_arguments():
                         type=int,
                         help='number of echildren per language/noise-level',
                         default=ExperimentDefaults.numechildren)
-    parser.add_argument('-t', '--threshold',
-                        type=float,
-                        default=ExperimentDefaults.threshold)
     parser.add_argument('-s', '--num-sents',
                         type=int,
                         default=ExperimentDefaults.numberofsentences)
@@ -167,17 +163,19 @@ def main():
                  ' '.join('{}={}'.format(key, val)
                           for key, val in args.__dict__.items()))
 
-    results = run_simulations(
-        rate=args.rate,
-        conservativerate=args.cons_rate,
-        numberofsentences=args.num_sents,
-        threshold=args.threshold,
+    params = ExperimentParameters(
+        learningrate=args.rate,
+        conservative_learningrate=args.cons_rate,
+        num_sentences=args.num_sents,
         noise_levels=args.noise_levels,
         num_procs=args.num_procs,
         num_echildren=args.num_echildren,
-        colag_domain_file='COLAG_2011_flat.txt',
-        languages=[Language.English, Language.French, Language.German, Language.Japanese],
-    )
+        languages=[Language.English,
+                   Language.French,
+                   Language.German,
+                   Language.Japanese])
+
+    results = run_simulations(params)
 
     if args.verbose:
         logging.getLogger().setLevel(logging.DEBUG)
