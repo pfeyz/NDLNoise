@@ -64,7 +64,7 @@ def barplot_output(pathname, image_output):
         ax.set_yticks([0, 1], minor=True)
         ax.grid()
         ax.grid(axis='y', which='minor', ls=':')
-        ax.set_title('{} {}'.format(language, languages[language]))
+        ax.set_title('{} {}'.format(language, languages.get(language, '')))
 
     fig.savefig(image_output)
 

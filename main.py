@@ -86,9 +86,9 @@ def run_trial(params: TrialParameters):
     child = run_child(**params)  # type: ignore
     now = datetime.now()
 
-    child.grammar['language'] = child.grammar.pop('lang')
     results = {'timestamp': now,
                'duration': now - then,
+               'language': child.target_language,
                **child.grammar,
                **params}  # type: ignore
 
