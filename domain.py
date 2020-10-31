@@ -10,7 +10,6 @@ from hashlib import md5
 from random import choice
 from typing import Dict, List, NewType
 
-from InstrumentedChild import InstrumentedNDChild
 from Sentence import Sentence
 from utils import progress_bar
 
@@ -41,17 +40,23 @@ def download_file(url):
     return local_filename
 
 
+# changing the salt will force the cached domain to be regenerated
+SALT = b'j3k2f2'
+
+
 def pickled_path(domain_file):
     """Returns the expected pickled path for the domain file, with the file's hash
     embedded in the filename. If the domain file ever changes, the hash will
     change, which will force recomputing the domain object from the flat file.
 
     """
-    return '{}-{}.pkl'.format(domain_file, hash_file(domain_file))
+    return '{}-{}.pkl'.format(domain_file, hash_file(domain_file, SALT))
 
 
-def hash_file(path):
+def hash_file(path, salt=None):
     digest = md5()
+    if salt is not None:
+        digest.update(SALT)
     with open(path, 'rb') as fh:
         while True:
             data = fh.read(128*1024)
@@ -68,11 +73,13 @@ class ColagDomain:
     # maps from sentence id -> sentence objects
     sentences: Dict[SentenceId, Sentence]
 
+    flatfile_url = 'http://www.colag.cs.hunter.cuny.edu/grammar/data/COLAG_2011_flat.zip'
+
     def __init__(self):
         self.languages = {}
         self.sentences = {}
 
-    def init_from_flatfile(self, rate, conservativerate):
+    def init_from_flatfile(self):
         """Convenience function that downloads, unzips and reads the colag domain file,
         if necessary.
 
@@ -82,13 +89,13 @@ class ColagDomain:
         if not os.path.exists(txt):
             if not os.path.exists(zipped):
                 logging.info('downloading colag flatfile')
-                download_file('http://www.colag.cs.hunter.cuny.edu/grammar/data/COLAG_2011_flat.zip')
+                download_file(self.flatfile_url)
             logging.info('unzipping colag flatfile')
             with zipfile.ZipFile(zipped, 'r') as zip_ref:
                 zip_ref.extractall('.')
-        self.read_domain_flatfile(txt, rate, conservativerate)
+        self.read_domain_flatfile(txt)
 
-    def read_domain_flatfile(self, domain_file, rate, conservativerate):
+    def read_domain_flatfile(self, domain_file):
         """Populates ColagDomain object from sentences in colag flatfile
         `domain_file`. If the file has been read before and cached locally on
         disk as pickle, just reads and returns the cached object.
@@ -119,8 +126,6 @@ class ColagDomain:
                     self.languages[grammar_id].append(sent.sentID)
                 except KeyError:
                     self.languages[grammar_id] = [sent.sentID]
-
-                InstrumentedNDChild.precompute_sentence(sent, rate, conservativerate)
 
                 self.sentences[sent.sentID] = sent
                 token_count += 1

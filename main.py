@@ -119,8 +119,11 @@ def run_simulations(params: ExperimentParameters):
                   * len(params.languages)
                   * len(params.noise_levels))
 
-    DOMAIN.init_from_flatfile(params.learningrate,
-                              params.conservative_learningrate)
+    DOMAIN.init_from_flatfile()
+
+    for sent in progress_bar(DOMAIN.sentences.values(),
+                             desc='precomputing triggers'):
+        InstrumentedNDChild.precompute_sentence(sent)
 
     with multiprocessing.Pool(params.num_procs) as p:
         results = p.imap_unordered(run_trial, trials)
