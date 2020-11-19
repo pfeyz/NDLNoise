@@ -1,14 +1,13 @@
 # coding: utf-8
 
 import argparse
-import dataclasses
 import logging
 import multiprocessing
 from datetime import datetime
 from random import random
-from typing import List
 
 from InstrumentedChild import InstrumentedNDChild
+from datatypes import ExperimentParameters, TrialParameters, NDResult
 from domain import ColagDomain
 from output_handler import write_results
 from utils import progress_bar
@@ -25,27 +24,6 @@ class ExperimentDefaults:
     numberofsentences = 500000
     numechildren = 100
     noise_levels = [0, 0.05, 0.10, 0.25, 0.50]
-
-
-@dataclasses.dataclass
-class ExperimentParameters:
-    languages: List[int]
-    noise_levels: List[float]
-    learningrate: float
-    conservative_learningrate: float
-    num_sentences: int
-    num_echildren: int
-    num_procs: int
-
-
-@dataclasses.dataclass
-class TrialParameters:
-    """ The parameters for a single echild simulation """
-    language: int
-    noise: float
-    rate: float
-    conservativerate: float
-    numberofsentences: int
 
 
 class Language:
@@ -81,20 +59,21 @@ def run_trial(params: TrialParameters):
     """ Runs a single echild simulation and reports the results """
     logging.debug('running echild with %s', params)
 
-    params = dataclasses.asdict(params)  # type: ignore
+    params = params.as_dict()
     then = datetime.now()
     child = run_child(**params)  # type: ignore
     now = datetime.now()
 
-    results = {'timestamp': now,
-               'duration': now - then,
-               'language': child.target_language,
-               **child.grammar,
-               **params}  # type: ignore
+    result = NDResult(
+        trial_params=params,
+        timestamp=now,
+        duration=now - then,
+        language=child.target_language,
+        grammar=child.grammar)
 
-    logging.debug('experiment results: %s', results)
+    logging.debug('experiment result: %s', result)
 
-    return results
+    return result
 
 
 def run_simulations(params: ExperimentParameters):

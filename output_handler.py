@@ -1,13 +1,15 @@
 import csv
-import dataclasses
 import datetime
 import logging
 import os
 import os.path
 import re
+from typing import List
 
 import pandas as pd
 import matplotlib.pyplot as plt
+
+from datatypes import NDResult
 
 languages = {
     611: 'english',
@@ -69,20 +71,11 @@ def barplot_output(pathname, image_output):
     fig.savefig(image_output)
 
 
-def write_results(output_directory, params, results):
+def write_results(output_directory, params, results: List[NDResult]):
     """Writes simulation results to csv, plots to a pdf and writes summary stats
     to an excel file."""
 
     from main import TrialParameters
-
-    param_fields = [
-        field.name for field in dataclasses.fields(TrialParameters)
-    ]
-
-    csv_columns = [
-        *param_fields, "SP", "HIP", "HCP", "OPT", "NS", "NT", "WHM", "PI",
-        "TM", "VtoI", "ItoC", "AH", "QInv", "timestamp", "duration"
-    ]
 
     output_subdir = os.path.join(
         output_directory, '{timestamp}_R{rate}_C{cons_rate}'.format(
@@ -102,10 +95,10 @@ def write_results(output_directory, params, results):
     logging.info('writing results to %s', csv_output)
 
     with open(csv_output, 'w') as fh:
-        writer = csv.DictWriter(fh, fieldnames=csv_columns)
+        writer = csv.DictWriter(fh, fieldnames=NDResult.csv_headers())
         writer.writeheader()
         for result in results:
-            writer.writerow(result)
+            writer.writerow(result.as_csv_row())
 
     plot_output = os.path.join(output_subdir, 'plot.pdf')
     stats_output = os.path.join(output_subdir, 'summary.xls')
