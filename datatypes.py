@@ -2,10 +2,12 @@ from datetime import datetime, timedelta
 from typing import List
 import dataclasses
 
+from domain import GrammarId
+
 
 @dataclasses.dataclass
 class ExperimentParameters:
-    languages: List[int]
+    languages: List[GrammarId]
     noise_levels: List[float]
     learningrate: float
     conservative_learningrate: float
@@ -17,7 +19,7 @@ class ExperimentParameters:
 @dataclasses.dataclass
 class TrialParameters:
     """ The parameters for a single echild simulation """
-    language: int
+    language: GrammarId
     noise: float
     rate: float
     conservativerate: float

@@ -54,6 +54,7 @@ def pickled_path(domain_file):
 
 
 def hash_file(path, salt=None):
+    """ Returns the md5 hash of a `path` on disk """
     digest = md5()
     if salt is not None:
         digest.update(SALT)
@@ -67,6 +68,8 @@ def hash_file(path, salt=None):
 
 
 class ColagDomain:
+    """ Represents the COLAG language domain."""
+
     # maps from grammar id -> list of sentence ids
     languages: Dict[GrammarId, List[SentenceId]]
 
@@ -76,6 +79,9 @@ class ColagDomain:
     flatfile_url = 'http://www.colag.cs.hunter.cuny.edu/grammar/data/COLAG_2011_flat.zip'
 
     def __init__(self):
+        """Reading the domainfile is deferred so that a single global colag
+        object can be created at the beginning of the script, to be shared
+        between processes. """
         self.languages = {}
         self.sentences = {}
 

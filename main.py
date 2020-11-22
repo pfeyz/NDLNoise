@@ -41,27 +41,23 @@ class LanguageNotFound(Exception):
     pass
 
 
-def run_child(language, noise, rate, conservativerate, numberofsentences):
-
-    aChild = InstrumentedNDChild(rate, conservativerate, language)
-
-    for i in range(numberofsentences):
-        if random() < noise:
-            s = DOMAIN.get_sentence_not_in_language(grammar_id=language)
-        else:
-            s = DOMAIN.get_sentence_in_language(grammar_id=language)
-        aChild.consumeSentence(s)
-
-    return aChild
-
-
 def run_trial(params: TrialParameters):
     """ Runs a single echild simulation and reports the results """
     logging.debug('running echild with %s', params)
 
-    params = params.as_dict()
+    language = params.language
+    noise_level = params.noise
+    child = InstrumentedNDChild(params.rate, params.conservativerate, language)
+
     then = datetime.now()
-    child = run_child(**params)  # type: ignore
+
+    for i in range(params.numberofsentences):
+        if random() < noise_level:
+            s = DOMAIN.get_sentence_not_in_language(grammar_id=language)
+        else:
+            s = DOMAIN.get_sentence_in_language(grammar_id=language)
+        child.consumeSentence(s)
+
     now = datetime.now()
 
     result = NDResult(
@@ -77,9 +73,10 @@ def run_trial(params: TrialParameters):
 
 
 def run_simulations(params: ExperimentParameters):
-    """Runs echild simulations with given parameters across all available
-    processors. Returns a generator that yields one result dictionary (as
-    returned by run_trial) for each simulation run.
+    """Runs echild simulations according to `params`.
+
+    Returns a generator that yields one result dictionary (as returned by
+    run_trial) for each simulation run.
 
     """
 
@@ -94,18 +91,26 @@ def run_simulations(params: ExperimentParameters):
         for _ in range(params.num_echildren)
     )
 
+    # for reporting progress during the run
     num_trials = (params.num_echildren
                   * len(params.languages)
                   * len(params.noise_levels))
 
     DOMAIN.init_from_flatfile()
 
+    # compute all "static" triggers once for each sentence in the domain and
+    # store the cached value.
     for sent in progress_bar(DOMAIN.sentences.values(),
                              desc='precomputing triggers'):
         InstrumentedNDChild.precompute_sentence(sent)
 
     with multiprocessing.Pool(params.num_procs) as p:
+        # run trials across processors (this doesn't actually start them
+        # running- `results` is a generator. the actual computation is deferred
+        # until somebody iterates through the generator object.
         results = p.imap_unordered(run_trial, trials)
+
+        # report output
         results = progress_bar(results,
                                total=num_trials,
                                desc="running simulations")
