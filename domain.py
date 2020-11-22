@@ -40,8 +40,10 @@ def download_file(url):
     return local_filename
 
 
-# changing the salt will force the cached domain to be regenerated
-SALT = b'j3k2f2'
+# changing the salt will force the cached domain to be regenerated. this should
+# be done when changes are made to the domain-generation code that should force
+# re-running and re-caching.
+SALT = b'j3k2f3'
 
 
 def pickled_path(domain_file):
@@ -84,6 +86,7 @@ class ColagDomain:
         between processes. """
         self.languages = {}
         self.sentences = {}
+        self.sentence_list = []
 
     def init_from_flatfile(self):
         """Convenience function that downloads, unzips and reads the colag domain file,
@@ -114,6 +117,7 @@ class ColagDomain:
                 domain = pickle.load(fh)
                 self.languages = domain.languages
                 self.sentences = domain.sentences
+                self.sentence_list = domain.sentence_list
                 logging.info('pickled domain successfully read')
                 return
 
@@ -135,6 +139,9 @@ class ColagDomain:
 
                 self.sentences[sent.sentID] = sent
                 token_count += 1
+
+        self.sentence_list = list(self.sentences.values())
+
         logging.info('%s languages, %s sentence types, %s sentence tokens',
                      len(self.languages),
                      len(self.sentences),
@@ -146,7 +153,7 @@ class ColagDomain:
 
     def get_sentence_not_in_language(self, grammar_id: GrammarId):
         while True:
-            s: Sentence = choice(list(self.sentences.values()))
+            s: Sentence = choice(self.sentence_list)
             if s.sentID not in self.languages[grammar_id]:
                 return s
 
