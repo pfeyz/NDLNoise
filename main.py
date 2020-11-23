@@ -1,14 +1,13 @@
 # coding: utf-8
 
 import argparse
-import dataclasses
 import logging
 import multiprocessing
 from datetime import datetime
 from random import random
-from typing import List
 
-from InstrumentedChild import InstrumentedNDChild
+from NDChild import CachedChild
+from datatypes import ExperimentParameters, TrialParameters, NDResult
 from domain import ColagDomain
 from output_handler import write_results
 from utils import progress_bar
@@ -23,20 +22,8 @@ class ExperimentDefaults:
     rate = 0.9
     conservativerate = 0.0005
     numberofsentences = 500000
-    threshold = 0.001
     numechildren = 100
     noise_levels = [0, 0.05, 0.10, 0.25, 0.50]
-
-
-@dataclasses.dataclass
-class SimulationParameters:
-    """ The parameters for a single echild simulation """
-    language: int
-    noise: float
-    rate: float
-    conservativerate: float
-    numberofsentences: int
-    threshold: float
 
 
 class Language:
@@ -54,80 +41,130 @@ class LanguageNotFound(Exception):
     pass
 
 
-def run_child(language, noise, rate, conservativerate, numberofsentences,
-              threshold):
-
-    aChild = InstrumentedNDChild(rate, conservativerate, language)
-
-    for i in range(numberofsentences):
-        if random() < noise:
-            s = DOMAIN.get_sentence_not_in_language(grammar_id=language)
-        else:
-            s = DOMAIN.get_sentence_in_language(grammar_id=language)
-        aChild.consumeSentence(s)
-
-    return aChild
-
-
-def run_trial(params: SimulationParameters):
+def run_traced_trial(params: TrialParameters):
     """ Runs a single echild simulation and reports the results """
     logging.debug('running echild with %s', params)
 
-    params = dataclasses.asdict(params)
+    language = params.language
+    noise_level = params.noise
+    child = CachedChild(params.rate, params.conservativerate, language)
+
+    history = []
+
     then = datetime.now()
-    child = run_child(**params)
+
+    sample_period = params.numberofsentences / 1000
+
+    for i in range(params.numberofsentences):
+        if random() < noise_level:
+            s = DOMAIN.get_sentence_not_in_language(grammar_id=language)
+        else:
+            s = DOMAIN.get_sentence_in_language(grammar_id=language)
+        child.consumeSentence(s)
+        if i % sample_period == 0:
+            history.append(dict(child.grammar))
+
     now = datetime.now()
 
-    child.grammar['language'] = child.grammar.pop('lang')
-    results = {'timestamp': now,
-               'duration': now - then,
-               **child.grammar,
-               **params}
+    result = NDResult(
+        trial_params=params,
+        timestamp=now,
+        duration=now - then,
+        language=child.target_language,
+        grammar=child.grammar)
 
-    logging.debug('experiment results: %s', results)
+    logging.debug('experiment result: %s', result)
 
-    return results
+    import pandas as pd
+    import matplotlib.pyplot as plt
+    import numpy as np
+
+    df = pd.DataFrame(history)
+    df = df + (np.arange(len(df.columns)) / 500)
+    df.index = df.index * 1000
+    ax = df.plot(title='lang={}, noise={}'.format(params.language, params.noise),
+                 sharey=True,
+                 subplots=True)
+    # ax.set_xscale('log')
+    plt.show()
+
+    return result
+
+def run_trial(params: TrialParameters):
+    """ Runs a single echild simulation and reports the results """
+    logging.debug('running echild with %s', params)
+
+    language = params.language
+    noise_level = params.noise
+    child = CachedChild(params.rate, params.conservativerate, language)
+
+    then = datetime.now()
+
+    for i in range(params.numberofsentences):
+        if random() < noise_level:
+            s = DOMAIN.get_sentence_not_in_language(grammar_id=language)
+        else:
+            s = DOMAIN.get_sentence_in_language(grammar_id=language)
+        child.consumeSentence(s)
+
+    now = datetime.now()
+
+    result = NDResult(
+        trial_params=params,
+        timestamp=now,
+        duration=now - then,
+        language=child.target_language,
+        grammar=child.grammar)
+
+    logging.debug('experiment result: %s', result)
+
+    return result
 
 
-def run_simulations(colag_domain_file: str,
-                    num_echildren: int,
-                    languages: List[int],
-                    noise_levels: List[float],
-                    numberofsentences: int,
-                    rate: float,
-                    conservativerate: float,
-                    threshold: float,
-                    num_procs: int,
-                    show_progress=True):
-    """Runs echild simulations with given parameters across all available
-    processors. Returns a generator that yields one result dictionary (as
-    returned by run_trial) for each simulation run.
+def run_simulations(params: ExperimentParameters):
+    """Runs echild simulations according to `params`.
+
+    Returns a generator that yields one result dictionary (as returned by
+    run_trial) for each simulation run.
 
     """
 
-    tasks = (
-        SimulationParameters(
-            language=lang,
-            noise=noise,
-            rate=rate,
-            numberofsentences=numberofsentences,
-            conservativerate=conservativerate,
-            threshold=threshold)
-
-        for lang in languages
-        for noise in noise_levels
-        for _ in range(num_echildren)
+    trials = (
+        TrialParameters(language=lang,
+                        noise=noise,
+                        rate=params.learningrate,
+                        numberofsentences=params.num_sentences,
+                        conservativerate=params.conservative_learningrate)
+        for lang in params.languages
+        for noise in params.noise_levels
+        for _ in range(params.num_echildren)
     )
 
-    num_tasks = num_echildren * len(languages) * len(noise_levels)
+    # for reporting progress during the run
+    num_trials = (params.num_echildren
+                  * len(params.languages)
+                  * len(params.noise_levels))
 
-    DOMAIN.init_from_flatfile(rate, conservativerate)
+    DOMAIN.init_from_flatfile()
 
-    with multiprocessing.Pool(num_procs) as p:
-        results = p.imap_unordered(run_trial, tasks)
-        if show_progress:
-            results = progress_bar(results, total=num_tasks,
-                                   desc="running simulations")
+    # compute all "static" triggers once for each sentence in the domain and
+    # store the cached value.
+    CachedChild.precompute_domain(DOMAIN)
+
+
+    with multiprocessing.Pool(params.num_procs) as p:
+        # run trials across processors (this doesn't actually start them
+        # running- `results` is a generator. the actual computation is deferred
+        # until somebody iterates through the generator object.
+        if params.trace:
+            results = p.imap_unordered(run_traced_trial, trials)
+        else:
+            results = p.imap_unordered(run_trial, trials)
+
+        # report output
+        results = progress_bar(results,
+                               total=num_trials,
+                               desc="running simulations")
         yield from results
 
 
@@ -143,46 +180,58 @@ def parse_arguments():
                         type=int,
                         help='number of echildren per language/noise-level',
                         default=ExperimentDefaults.numechildren)
-    parser.add_argument('-t', '--threshold',
-                        type=float,
-                        default=ExperimentDefaults.threshold)
     parser.add_argument('-s', '--num-sents',
                         type=int,
                         default=ExperimentDefaults.numberofsentences)
     parser.add_argument('-n', '--noise-levels', nargs="+", type=float,
                         default=ExperimentDefaults.noise_levels)
+    parser.add_argument('-l', '--languages', nargs="+", type=int,
+                        default=[Language.English,
+                                 Language.French,
+                                 Language.German,
+                                 Language.Japanese])
     parser.add_argument('-p', '--num-procs', type=int,
                         help='number of concurrent processes to run',
                         default=multiprocessing.cpu_count())
     parser.add_argument('-v', '--verbose', default=False,
                         action='store_const', const=True,
                         help='Output per-echild debugging info')
+    parser.add_argument('--trace', default=False,
+                        action='store_const', const=True,
+                        help='Trace & plot per-parameter values over time')
     return parser.parse_args()
 
 
 def main():
     args = parse_arguments()
 
+    if args.trace:
+        args.num_echildren = 1
+
     logging.info('starting simulation with %s',
                  ' '.join('{}={}'.format(key, val)
                           for key, val in args.__dict__.items()))
 
-    results = run_simulations(
-        rate=args.rate,
-        conservativerate=args.cons_rate,
-        numberofsentences=args.num_sents,
-        threshold=args.threshold,
+    params = ExperimentParameters(
+        learningrate=args.rate,
+        conservative_learningrate=args.cons_rate,
+        num_sentences=args.num_sents,
         noise_levels=args.noise_levels,
         num_procs=args.num_procs,
         num_echildren=args.num_echildren,
-        colag_domain_file='COLAG_2011_flat.txt',
-        languages=[Language.English, Language.French, Language.German, Language.Japanese],
-    )
+        languages=args.languages,
+        trace=args.trace)
+
+    results = run_simulations(params)
 
     if args.verbose:
         logging.getLogger().setLevel(logging.DEBUG)
 
-    write_results('simulation_output', args, results)
+    if args.trace:
+        for result in results:
+            pass
+    else:
+        write_results('simulation_output', args, results)
 
 
 if __name__ == "__main__":
