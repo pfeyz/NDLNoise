@@ -14,6 +14,7 @@ class ExperimentParameters:
     num_sentences: int
     num_echildren: int
     num_procs: int
+    trace: bool
 
 
 @dataclasses.dataclass

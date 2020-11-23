@@ -41,6 +41,55 @@ class LanguageNotFound(Exception):
     pass
 
 
+def run_traced_trial(params: TrialParameters):
+    """ Runs a single echild simulation and reports the results """
+    logging.debug('running echild with %s', params)
+
+    language = params.language
+    noise_level = params.noise
+    child = InstrumentedNDChild(params.rate, params.conservativerate, language)
+
+    history = []
+
+    then = datetime.now()
+
+    sample_period = params.numberofsentences / 1000
+
+    for i in range(params.numberofsentences):
+        if random() < noise_level:
+            s = DOMAIN.get_sentence_not_in_language(grammar_id=language)
+        else:
+            s = DOMAIN.get_sentence_in_language(grammar_id=language)
+        child.consumeSentence(s)
+        if i % sample_period == 0:
+            history.append(dict(child.grammar))
+
+    now = datetime.now()
+
+    result = NDResult(
+        trial_params=params,
+        timestamp=now,
+        duration=now - then,
+        language=child.target_language,
+        grammar=child.grammar)
+
+    logging.debug('experiment result: %s', result)
+
+    import pandas as pd
+    import matplotlib.pyplot as plt
+    import numpy as np
+
+    df = pd.DataFrame(history)
+    df = df + (np.arange(len(df.columns)) / 500)
+    df.index = df.index * 1000
+    ax = df.plot(title='lang={}, noise={}'.format(params.language, params.noise),
+                 sharey=True,
+                 subplots=True)
+    # ax.set_xscale('log')
+    plt.show()
+
+    return result
+
 def run_trial(params: TrialParameters):
     """ Runs a single echild simulation and reports the results """
     logging.debug('running echild with %s', params)
@@ -104,11 +153,15 @@ def run_simulations(params: ExperimentParameters):
                              desc='precomputing triggers'):
         InstrumentedNDChild.precompute_sentence(sent)
 
+
     with multiprocessing.Pool(params.num_procs) as p:
         # run trials across processors (this doesn't actually start them
         # running- `results` is a generator. the actual computation is deferred
         # until somebody iterates through the generator object.
-        results = p.imap_unordered(run_trial, trials)
+        if params.trace:
+            results = p.imap_unordered(run_traced_trial, trials)
+        else:
+            results = p.imap_unordered(run_trial, trials)
 
         # report output
         results = progress_bar(results,
@@ -134,17 +187,28 @@ def parse_arguments():
                         default=ExperimentDefaults.numberofsentences)
     parser.add_argument('-n', '--noise-levels', nargs="+", type=float,
                         default=ExperimentDefaults.noise_levels)
+    parser.add_argument('-l', '--languages', nargs="+", type=int,
+                        default=[Language.English,
+                                 Language.French,
+                                 Language.German,
+                                 Language.Japanese])
     parser.add_argument('-p', '--num-procs', type=int,
                         help='number of concurrent processes to run',
                         default=multiprocessing.cpu_count())
     parser.add_argument('-v', '--verbose', default=False,
                         action='store_const', const=True,
                         help='Output per-echild debugging info')
+    parser.add_argument('--trace', default=False,
+                        action='store_const', const=True,
+                        help='Trace per-parameter value over time')
     return parser.parse_args()
 
 
 def main():
     args = parse_arguments()
+
+    if args.trace:
+        args.num_echildren = 1
 
     logging.info('starting simulation with %s',
                  ' '.join('{}={}'.format(key, val)
@@ -157,17 +221,19 @@ def main():
         noise_levels=args.noise_levels,
         num_procs=args.num_procs,
         num_echildren=args.num_echildren,
-        languages=[Language.English,
-                   Language.French,
-                   Language.German,
-                   Language.Japanese])
+        languages=args.languages,
+        trace=args.trace)
 
     results = run_simulations(params)
 
     if args.verbose:
         logging.getLogger().setLevel(logging.DEBUG)
 
-    write_results('simulation_output', args, results)
+    if args.trace:
+        for result in results:
+            pass
+    else:
+        write_results('simulation_output', args, results)
 
 
 if __name__ == "__main__":
