@@ -200,7 +200,7 @@ def parse_arguments():
                         help='Output per-echild debugging info')
     parser.add_argument('--trace', default=False,
                         action='store_const', const=True,
-                        help='Trace per-parameter value over time')
+                        help='Trace & plot per-parameter values over time')
     return parser.parse_args()
 
 
