@@ -6,7 +6,7 @@ import multiprocessing
 from datetime import datetime
 from random import random
 
-from InstrumentedChild import InstrumentedNDChild
+from NDChild import CachedChild
 from datatypes import ExperimentParameters, TrialParameters, NDResult
 from domain import ColagDomain
 from output_handler import write_results
@@ -47,7 +47,7 @@ def run_traced_trial(params: TrialParameters):
 
     language = params.language
     noise_level = params.noise
-    child = InstrumentedNDChild(params.rate, params.conservativerate, language)
+    child = CachedChild(params.rate, params.conservativerate, language)
 
     history = []
 
@@ -96,7 +96,7 @@ def run_trial(params: TrialParameters):
 
     language = params.language
     noise_level = params.noise
-    child = InstrumentedNDChild(params.rate, params.conservativerate, language)
+    child = CachedChild(params.rate, params.conservativerate, language)
 
     then = datetime.now()
 
@@ -149,9 +149,7 @@ def run_simulations(params: ExperimentParameters):
 
     # compute all "static" triggers once for each sentence in the domain and
     # store the cached value.
-    for sent in progress_bar(DOMAIN.sentences.values(),
-                             desc='precomputing triggers'):
-        InstrumentedNDChild.precompute_sentence(sent)
+    CachedChild.precompute_domain(DOMAIN)
 
 
     with multiprocessing.Pool(params.num_procs) as p:

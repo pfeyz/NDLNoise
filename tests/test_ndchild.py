@@ -6,8 +6,8 @@ import re
 
 import pytest
 
-from NDChild import NDChild
-from main import DOMAIN, InstrumentedNDChild, progress_bar
+from NDChild import NDChild, CachedChild
+from main import DOMAIN, progress_bar
 
 
 def find_difference(g1, g2):
@@ -22,7 +22,7 @@ DOMAIN.init_from_flatfile()
 
 for sent in progress_bar(DOMAIN.sentences.values(),
                          desc='precomputing triggers'):
-    InstrumentedNDChild.precompute_sentence(sent)
+    CachedChild.precompute_sentence(sent)
 
 runs = glob.glob('tests/run_data/*.gz')
 
@@ -44,7 +44,7 @@ def test_drift_from_original(path):
     rate, cons = float(rate), float(cons)
 
     child = NDChild(rate, cons, lang)
-    cached_child = InstrumentedNDChild(rate, cons, lang)
+    cached_child = CachedChild(rate, cons, lang)
 
     with gzip.open(path) as fh:
         for line in fh:
@@ -63,12 +63,12 @@ languages = [random.choice(all_languages) for _ in range(10)]
 
 @pytest.mark.parametrize('language', languages)
 def test_ndchild_parity(language):
-    """Compares the behavior of NDChild and InstrumentedNDChild to ensure identical
+    """Compares the behavior of NDChild and CachedChild to ensure identical
     behavior
 
     """
     child = NDChild(0.9, 0.005, 2253)
-    cached_child = InstrumentedNDChild(0.9, 0.005, 2253)
+    cached_child = CachedChild(0.9, 0.005, 2253)
 
     num_sents = int(50000)
     for i in range(num_sents):
