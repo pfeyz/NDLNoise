@@ -368,16 +368,29 @@ class NDChild(object):
     #            self.adjustweightConservatively("ItoC", 1)
 
     def adjustweight(self, parameter, direction):
-        if direction == 0:
-            self.grammar[parameter] -= self.r * self.grammar[parameter]
-        elif direction == 1:
-            self.grammar[parameter] += self.r * (1 - self.grammar[parameter])
+        self._adjustweight(parameter, direction, self.r)
 
     def adjustweightConservatively(self, parameter, direction):
+        self._adjustweight(parameter, direction, self.conservativerate)
+
+    def _adjustweight(self, parameter, direction, rate):
         if direction == 0:
-            self.grammar[parameter] -= self.conservativerate * self.grammar[parameter]
+            self.grammar[parameter] -= rate * self.grammar[parameter]
         elif direction == 1:
-            self.grammar[parameter] += self.conservativerate * (1 - self.grammar[parameter])
+            self.grammar[parameter] += rate * (1 - self.grammar[parameter])
+
+
+class NDChildModLRP(NDChild):
+    def _adjustweight(self, parameter, direction, rate):
+        pval = self.grammar[parameter]
+        if pval >= 0.5:
+            coef = 1 - pval
+        else:
+            coef = pval
+        if direction == 0:
+            self.grammar[parameter] -= rate * coef
+        elif direction == 1:
+            self.grammar[parameter] += rate * coef
 
 
 class TriggerCacher:
