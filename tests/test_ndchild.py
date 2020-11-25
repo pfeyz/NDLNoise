@@ -6,10 +6,11 @@ import re
 
 import pytest
 
-from NDChild import NDChild, cached_child
+from NDChild import NDChild, NDChildModLRP, cached_child
 from main import DOMAIN, progress_bar
 
 CachedChild = cached_child(NDChild)
+
 
 def find_difference(g1, g2):
     diffs = {}
@@ -25,8 +26,24 @@ for sent in progress_bar(DOMAIN.sentences.values(),
                          desc='precomputing triggers'):
     CachedChild.precompute_sentence(sent)
 
-runs = glob.glob('tests/run_data/*.gz')
 
+def test_modlrp_child():
+    child = NDChildModLRP(0.9, None, None)
+
+    examples = [
+        (0.8, 1, 0.98),
+        (0.8, 0, 0.62),
+        (0.2, 1, 0.38),
+        (0.2, 0, 0.02)
+    ]
+
+    for pval, direction, expected in examples:
+        child.grammar['AH'] = pval
+        child.adjustweight('AH', direction)
+        assert round(child.grammar['AH'], 2) == expected
+
+
+runs = glob.glob('tests/run_data/*.gz')
 
 @pytest.mark.parametrize('path', runs)
 def test_drift_from_original(path):
