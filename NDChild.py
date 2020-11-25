@@ -14,6 +14,14 @@ class NDChild(object):
         return 'NDChild({})'.format({k: format_val(v)
                                      for k, v in self.grammar.items()})
 
+    @classmethod
+    def precompute_domain(cls, domain):
+        """Subclasses may implement this method if they want to do some processing on
+        the domain at startup.
+
+        """
+        pass
+
     def __init__(self, learningrate, conslearningrate, language):
 
         self.grammar = {"SP": .5, "HIP": .5, "HCP": .5, "OPT": .5, "NS": .5, "NT": .5, "WHM": .5,
@@ -428,60 +436,64 @@ class TriggerCacher:
         self.current_sentence = None
 
 
-class CachedChild(NDChild):
-    """An implementation of NDChild where all triggers which are pure functions,
-    (whose behavior depends solely on the input sentence, and not the state of
-    the grammar) are cached once for every sentence in the domain and then
-    simply looked up at runtime.
+def cached_child(klass):
+    """ Returns a version of klass with cached triggers """
+    class CachedChild(klass):
+        """An implementation of NDChild where all triggers which are pure functions,
+        (whose behavior depends solely on the input sentence, and not the state of
+        the grammar) are cached once for every sentence in the domain and then
+        simply looked up at runtime.
 
-    """
-    cacher = TriggerCacher()
+        """
+        cacher = TriggerCacher()
 
-    @classmethod
-    def precompute_domain(cls, domain):
-        for sentence in progress_bar(domain.sentences.values(),
-                                     desc='precomputing triggers'):
-            cls.precompute_sentence(sentence)
+        @classmethod
+        def precompute_domain(cls, domain):
+            for sentence in progress_bar(
+                    domain.sentences.values(),
+                    desc='{}: precomputing triggers'.format(klass.__name__)):
+                cls.precompute_sentence(sentence)
 
-    @classmethod
-    def precompute_sentence(cls, sentence):
-        cls.cacher.consume_sentence(sentence)
+        @classmethod
+        def precompute_sentence(cls, sentence):
+            cls.cacher.consume_sentence(sentence)
 
-    def handleTrigger(self, sentence, etrigger):
-        if etrigger not in sentence.triggers:
-            return
-        for param, direction, conservative in sentence.triggers[etrigger]:
-            if conservative:
-                self.adjustweightConservatively(param, direction)
-            else:
-                self.adjustweight(param, direction)
+        def handleTrigger(self, sentence, etrigger):
+            if etrigger not in sentence.triggers:
+                return
+            for param, direction, conservative in sentence.triggers[etrigger]:
+                if conservative:
+                    self.adjustweightConservatively(param, direction)
+                else:
+                    self.adjustweight(param, direction)
 
-    def QInvEtrigger(self, s):
-        self.handleTrigger(s, 'QInv')
+        def QInvEtrigger(self, s):
+            self.handleTrigger(s, 'QInv')
 
-    def VtoIEtrigger(self, s):
-        self.handleTrigger(s, 'VtoI')
+        def VtoIEtrigger(self, s):
+            self.handleTrigger(s, 'VtoI')
 
-    def hcpEtrigger(self, s):
-        self.handleTrigger(s, 'HCP')
+        def hcpEtrigger(self, s):
+            self.handleTrigger(s, 'HCP')
 
-    def hipEtrigger(self, s):
-        self.handleTrigger(s, 'HIP')
+        def hipEtrigger(self, s):
+            self.handleTrigger(s, 'HIP')
 
-    def nsEtrigger(self, s):
-        self.handleTrigger(s, 'NS')
+        def nsEtrigger(self, s):
+            self.handleTrigger(s, 'NS')
 
-    def ntEtrigger(self, s):
-        self.handleTrigger(s, 'NT')
+        def ntEtrigger(self, s):
+            self.handleTrigger(s, 'NT')
 
-    def piEtrigger(self, s):
-        self.handleTrigger(s, 'PI')
+        def piEtrigger(self, s):
+            self.handleTrigger(s, 'PI')
 
-    def spEtrigger(self, s):
-        self.handleTrigger(s, 'SP')
+        def spEtrigger(self, s):
+            self.handleTrigger(s, 'SP')
 
-    def tmEtrigger(self, s):
-        self.handleTrigger(s, 'TM')
+        def tmEtrigger(self, s):
+            self.handleTrigger(s, 'TM')
 
-    def whmEtrigger(self, s):
-        self.handleTrigger(s, 'WHM')
+        def whmEtrigger(self, s):
+            self.handleTrigger(s, 'WHM')
+    return CachedChild

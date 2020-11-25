@@ -6,9 +6,10 @@ import re
 
 import pytest
 
-from NDChild import NDChild, CachedChild
+from NDChild import NDChild, cached_child
 from main import DOMAIN, progress_bar
 
+CachedChild = cached_child(NDChild)
 
 def find_difference(g1, g2):
     diffs = {}
