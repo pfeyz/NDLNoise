@@ -35,7 +35,10 @@ optimized one.
 The program must be run with a Python interpreter that supports Python 3. It can run with:
 
     $ python main.py -h
-    usage: main.py [-h] [-r RATE] [-c CONS_RATE] [-e NUM_ECHILDREN] [-s NUM_SENTS] [-n NOISE_LEVELS [NOISE_LEVELS ...]] [-l LANGUAGES [LANGUAGES ...]] [-p NUM_PROCS] [-v] [--trace]
+    usage: main.py [-h] [-r RATE] [-c CONS_RATE] [-e NUM_ECHILDREN] [-s NUM_SENTS]
+                [-n NOISE_LEVELS [NOISE_LEVELS ...]]
+                [-l LANGUAGES [LANGUAGES ...]] [-p NUM_PROCS] [-v] [--trace]
+                [--mod-lrp]
 
     optional arguments:
     -h, --help            show this help message and exit
@@ -50,7 +53,7 @@ The program must be run with a Python interpreter that supports Python 3. It can
                             number of concurrent processes to run
     -v, --verbose         Output per-echild debugging info
     --trace               Trace & plot per-parameter values over time
-
+    --mod-lrp             Use the modified-LRP learner
 
 The first time you run main.py, the program will download the colag domain file
 from the colag website, then parse the file and cache the resulting data

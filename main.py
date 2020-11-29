@@ -6,7 +6,7 @@ import multiprocessing
 from datetime import datetime
 from random import random
 
-from NDChild import CachedChild
+from NDChild import NDChild, NDChildModLRP, cached_child
 from datatypes import ExperimentParameters, TrialParameters, NDResult
 from domain import ColagDomain
 from output_handler import write_results
@@ -47,7 +47,7 @@ def run_traced_trial(params: TrialParameters):
 
     language = params.language
     noise_level = params.noise
-    child = CachedChild(params.rate, params.conservativerate, language)
+    child = NDChild(params.rate, params.conservativerate, language)
 
     history = []
 
@@ -96,7 +96,7 @@ def run_trial(params: TrialParameters):
 
     language = params.language
     noise_level = params.noise
-    child = CachedChild(params.rate, params.conservativerate, language)
+    child = NDChild(params.rate, params.conservativerate, language)
 
     then = datetime.now()
 
@@ -149,8 +149,7 @@ def run_simulations(params: ExperimentParameters):
 
     # compute all "static" triggers once for each sentence in the domain and
     # store the cached value.
-    CachedChild.precompute_domain(DOMAIN)
-
+    NDChild.precompute_domain(DOMAIN)
 
     with multiprocessing.Pool(params.num_procs) as p:
         # run trials across processors (this doesn't actually start them
@@ -199,10 +198,15 @@ def parse_arguments():
     parser.add_argument('--trace', default=False,
                         action='store_const', const=True,
                         help='Trace & plot per-parameter values over time')
+    parser.add_argument('--mod-lrp', default=False,
+                        action='store_const', const=True,
+                        help='Use the modified-LRP learner')
     return parser.parse_args()
 
 
 def main():
+    global NDChild
+
     args = parse_arguments()
 
     if args.trace:
@@ -223,6 +227,11 @@ def main():
         trace=args.trace)
 
     results = run_simulations(params)
+
+    if args.mod_lrp:
+        NDChild = cached_child(NDChildModLRP)
+    else:
+        NDChild = cached_child(NDChild)
 
     if args.verbose:
         logging.getLogger().setLevel(logging.DEBUG)
