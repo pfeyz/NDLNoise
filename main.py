@@ -269,9 +269,9 @@ def main():
     output_directory = os.path.join(
         'simulation_output', '{timestamp}_R{rate}_C{cons_rate}{lrp}'.format(
             timestamp=datetime.now().strftime('%F:%R:%S'),
-            rate=params.learningrate,
             lrp='_mod-lrp' if args.mod_lrp else '',
-            cons_rate=params.conservative_learningrate))
+            rate=('%f' % params.learningrate).rstrip('0'),
+            cons_rate=('%f' % params.conservative_learningrate).rstrip('0')))
     try:
         os.mkdir('simulation_output')
     except FileExistsError:
