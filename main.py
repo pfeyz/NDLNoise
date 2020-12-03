@@ -3,7 +3,9 @@
 import argparse
 import logging
 import multiprocessing
+import os.path
 from datetime import datetime
+from functools import partial
 from random import random
 
 from NDChild import NDChild, NDChildModLRP, cached_child
@@ -41,8 +43,9 @@ class LanguageNotFound(Exception):
     pass
 
 
-def run_traced_trial(params: TrialParameters):
+def run_traced_trial(params: TrialParameters, output_directory):
     """ Runs a single echild simulation and reports the results """
+
     logging.debug('running echild with %s', params)
 
     language = params.language
@@ -79,6 +82,8 @@ def run_traced_trial(params: TrialParameters):
     import matplotlib.pyplot as plt
     import numpy as np
 
+    plt.rcParams['figure.figsize'] = 15, 10
+
     df = pd.DataFrame(history)
     df = df + (np.arange(len(df.columns)) / 500)
     df.index = df.index * 1000
@@ -86,7 +91,8 @@ def run_traced_trial(params: TrialParameters):
                  sharey=True,
                  subplots=True)
     # ax.set_xscale('log')
-    plt.show()
+    plt.savefig(os.path.join(output_directory,
+                             '{}-{}.png'.format(language, noise_level)))
 
     return result
 
@@ -121,7 +127,7 @@ def run_trial(params: TrialParameters):
     return result
 
 
-def run_simulations(params: ExperimentParameters):
+def run_simulations(params: ExperimentParameters, output_directory):
     """Runs echild simulations according to `params`.
 
     Returns a generator that yields one result dictionary (as returned by
@@ -151,20 +157,52 @@ def run_simulations(params: ExperimentParameters):
     # store the cached value.
     NDChild.precompute_domain(DOMAIN)
 
+    plot_simulations(params, output_directory)
+
     with multiprocessing.Pool(params.num_procs) as p:
         # run trials across processors (this doesn't actually start them
         # running- `results` is a generator. the actual computation is deferred
         # until somebody iterates through the generator object.
-        if params.trace:
-            results = p.imap_unordered(run_traced_trial, trials)
-        else:
-            results = p.imap_unordered(run_trial, trials)
+        results = p.imap_unordered(run_trial, trials)
 
         # report output
         results = progress_bar(results,
                                total=num_trials,
                                desc="running simulations")
         yield from results
+
+
+def plot_simulations(params: ExperimentParameters, output_directory):
+
+    subdir = os.path.join(output_directory, 'plots')
+    os.mkdir(subdir)
+
+    trials = (
+        TrialParameters(language=lang,
+                        noise=noise,
+                        rate=params.learningrate,
+                        numberofsentences=params.num_sentences,
+                        conservativerate=params.conservative_learningrate)
+        for lang in params.languages
+        for noise in params.noise_levels
+    )
+
+    num_trials = len(params.languages) * len(params.noise_levels)
+
+    with multiprocessing.Pool(params.num_procs) as p:
+        # run trials across processors (this doesn't actually start them
+        # running- `results` is a generator. the actual computation is deferred
+        # until somebody iterates through the generator object.
+        results = p.imap_unordered(partial(run_traced_trial,
+                                           output_directory=subdir),
+                                   trials)
+
+        # report output
+        results = progress_bar(results,
+                               total=num_trials,
+                               desc="plotting runs")
+
+        list(results)
 
 
 def parse_arguments():
@@ -223,24 +261,32 @@ def main():
         noise_levels=args.noise_levels,
         num_procs=args.num_procs,
         num_echildren=args.num_echildren,
-        languages=args.languages,
-        trace=args.trace)
+        languages=args.languages)
 
-    results = run_simulations(params)
+    if args.verbose:
+        logging.getLogger().setLevel(logging.DEBUG)
+
+    output_directory = os.path.join(
+        'simulation_output', '{timestamp}_R{rate}_C{cons_rate}{lrp}'.format(
+            timestamp=datetime.now().strftime('%F:%R:%S'),
+            rate=params.learningrate,
+            lrp='_mod-lrp' if args.mod_lrp else '',
+            cons_rate=params.conservative_learningrate))
+    try:
+        os.mkdir('simulation_output')
+    except FileExistsError:
+        pass
+
+    os.mkdir(output_directory)
+
+    results = run_simulations(params, output_directory)
 
     if args.mod_lrp:
         NDChild = cached_child(NDChildModLRP)
     else:
         NDChild = cached_child(NDChild)
 
-    if args.verbose:
-        logging.getLogger().setLevel(logging.DEBUG)
-
-    if args.trace:
-        for result in results:
-            pass
-    else:
-        write_results('simulation_output', args, results)
+    write_results(output_directory, args, results)
 
 
 if __name__ == "__main__":

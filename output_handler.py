@@ -75,22 +75,7 @@ def write_results(output_directory, params, results: List[NDResult]):
     """Writes simulation results to csv, plots to a pdf and writes summary stats
     to an excel file."""
 
-    from main import TrialParameters
-
-    output_subdir = os.path.join(
-        output_directory, '{timestamp}_R{rate}_C{cons_rate}'.format(
-            timestamp=datetime.datetime.now().strftime('%F:%R:%S'),
-            rate=params.rate,
-            cons_rate=params.cons_rate))
-
-    try:
-        os.mkdir(output_directory)
-    except FileExistsError:
-        pass
-
-    os.mkdir(output_subdir)
-
-    csv_output = os.path.join(output_subdir, 'output.csv')
+    csv_output = os.path.join(output_directory, 'output.csv')
 
     logging.info('writing results to %s', csv_output)
 
@@ -100,8 +85,8 @@ def write_results(output_directory, params, results: List[NDResult]):
         for result in results:
             writer.writerow(result.as_csv_row())
 
-    plot_output = os.path.join(output_subdir, 'plot.pdf')
-    stats_output = os.path.join(output_subdir, 'summary.xls')
+    plot_output = os.path.join(output_directory, 'plot.pdf')
+    stats_output = os.path.join(output_directory, 'summary.xls')
 
     logging.info('writing summary stats to %s', stats_output)
     summary_stats_output(csv_output, stats_output)
