@@ -93,6 +93,9 @@ def run_traced_trial(params: TrialParameters, output_directory):
     # ax.set_xscale('log')
     plt.savefig(os.path.join(output_directory,
                              '{}-{}.png'.format(language, noise_level)))
+    import pickle
+    with open(os.path.join(output_directory, '{}-{}.pkl'.format(language, noise_level)), 'wb') as fh:
+        pickle.dump(history, fh)
 
     return result
 
